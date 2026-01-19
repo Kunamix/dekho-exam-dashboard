@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider } from "@/contexts/SidebarContext";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Categories from "./pages/Categories";
 import Subjects from "./pages/Subjects";
@@ -29,8 +30,12 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+<<<<<<< HEAD
             <Route path="/" element = {<Login/>} />
             <Route path="/otp-verification" element = {<OTPVerification/>} />
+=======
+            <Route path="/" element={<Login />} />
+>>>>>>> 59df01b2f1f2bf8d642d1ce1e6c3b8e2a65a7986
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/subjects" element={<Subjects />} />
