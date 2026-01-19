@@ -16,6 +16,8 @@ import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import Login from "./pages/Login";
+import OTPVerification from "./pages/OtpVerifyPage";
 
 const queryClient = new QueryClient();
 
@@ -27,7 +29,9 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element = {<Login/>} />
+            <Route path="/otp-verification" element = {<OTPVerification/>} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/subjects" element={<Subjects />} />
             <Route path="/questions" element={<Questions />} />
