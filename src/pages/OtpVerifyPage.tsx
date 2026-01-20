@@ -1,23 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  GraduationCap, 
+import React, { useState, useEffect, useRef } from "react";
+import {
+  GraduationCap,
   ArrowLeft,
-  Loader2, 
+  Loader2,
   AlertCircle,
   Shield,
   CheckCircle,
   Users,
   BookOpen,
-  HelpCircle
-} from 'lucide-react';
+  HelpCircle,
+} from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import api from "@/lib/api";
 
-
-const cn = (...classes) => classes.filter(Boolean).join(' ');
+const cn = (...classes) => classes.filter(Boolean).join(" ");
 
 const OTPVerification = () => {
-  const phoneNumber = '9876543210'; // Demo phone number
-  
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const phoneNumber = location.state?.phoneNumber;
+
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ otp?: string; general?: string }>({});
   const [shake, setShake] = useState(false);
@@ -25,17 +32,19 @@ const OTPVerification = () => {
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  
+  const [toastMessage, setToastMessage] = useState("");
+
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    // Trigger page load animation
+    if (!phoneNumber) {
+      navigate("/");
+      toast.error("Please login first");
+    }
     setTimeout(() => setIsPageLoaded(true), 100);
-    
     // Focus first input
     inputRefs.current[0]?.focus();
-  }, []);
+  }, [phoneNumber,navigate]);
 
   useEffect(() => {
     // Resend timer
@@ -47,6 +56,44 @@ const OTPVerification = () => {
     }
   }, [resendTimer]);
 
+  // --- React Query Mutations ---
+  const verifyMutation = useMutation({
+    mutationFn: async (otpCode: string) => {
+      const {data} = await api.post("/auth/admin-verify-otp", {
+        phoneNumber,
+        otpCode
+      });
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Verified successfully');
+      localStorage.setItem("user_info","true");
+      queryClient.invalidateQueries({queryKey: ["auth-user"]});
+      navigate('/dashboard');
+    },
+    onError: (error:any) => {
+      const msg = error.response?.data?.message || 'Invalid OTP';
+      setErrors({general: msg});
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+      setOtp(['','','','','','']);
+      inputRefs.current[0]?.focus();
+    }
+  });
+
+  // 2. Resend OTP Mutation
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      return api.post("/auth/admin-login", {phoneNumber});
+    },
+    onSuccess: () => {
+      toast.success('A new OTP has been sent!');
+      setCanResend(false);
+      setResendTimer(30);
+    },
+    onError: () => toast.error("Failed to resend OTP")
+  });
+
   const showSuccessToast = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
@@ -56,103 +103,94 @@ const OTPVerification = () => {
   const handleChange = (index: number, value: string) => {
     // Only allow digits
     if (!/^\d*$/.test(value)) return;
-    
+
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1); // Take only last character
     setOtp(newOtp);
-    
+
     // Clear errors
-    if (errors.otp) setErrors(prev => ({ ...prev, otp: undefined }));
-    
+    if (errors.otp) setErrors((prev) => ({ ...prev, otp: undefined }));
+
     // Auto-focus next input
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
     // Handle backspace
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    const pastedData = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 6);
     const newOtp = [...otp];
-    
-    pastedData.split('').forEach((char, index) => {
+
+    pastedData.split("").forEach((char, index) => {
       if (index < 6) {
         newOtp[index] = char;
       }
     });
-    
+
     setOtp(newOtp);
-    
+
     // Focus last filled input or last input
     const lastIndex = Math.min(pastedData.length, 5);
     inputRefs.current[lastIndex]?.focus();
   };
 
   const validateOtp = (): boolean => {
-    const otpValue = otp.join('');
-    
+    const otpValue = otp.join("");
+
     if (otpValue.length !== 6) {
-      setErrors({ otp: 'Please enter complete 6-digit OTP' });
+      setErrors({ otp: "Please enter complete 6-digit OTP" });
       return false;
     }
-    
+
     return true;
   };
 
-  const handleSubmit = async () => {
-    if (!validateOtp()) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const otpValue = otp.join('');
+
+    if(otpValue.length !== 6){
+      setErrors({otp: 'Please enter complete 6-digit OTP'});
       setShake(true);
       setTimeout(() => setShake(false), 500);
       return;
     }
-
-    setIsLoading(true);
-    setErrors({});
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const otpValue = otp.join('');
-    
-    // Mock OTP verification (accept 123456 as valid OTP)
-    if (otpValue === '123456') {
-      showSuccessToast('OTP verified successfully! Redirecting...');
-      
-      setTimeout(() => {
-        alert('Redirecting to dashboard...');
-      }, 1000);
-    } else {
-      setIsLoading(false);
-      setErrors({ general: 'Invalid OTP. Please try again.' });
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-    }
+    verifyMutation.mutate(otpValue);
   };
+
+  
 
   const handleResendOtp = async () => {
     if (!canResend) return;
-    
+
     setCanResend(false);
     setResendTimer(30);
-    
+
     // Simulate resend API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    showSuccessToast('OTP resent successfully!');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    showSuccessToast("OTP resent successfully!");
   };
 
   const handleBackToLogin = () => {
-    alert('Redirecting to login page...');
+    navigate('/')
   };
+
+  if(!phoneNumber) return null;
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -165,14 +203,20 @@ const OTPVerification = () => {
       )}
 
       {/* Left Side - OTP Form */}
-      <div className={cn(
-        "w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 md:p-12 transition-all duration-700",
-        isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-      )}>
-        <div className={cn(
-          "w-full max-w-[400px] space-y-6",
-          shake && "animate-shake"
-        )}>
+      <div
+        className={cn(
+          "w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 md:p-12 transition-all duration-700",
+          isPageLoaded
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 translate-y-4",
+        )}
+      >
+        <div
+          className={cn(
+            "w-full max-w-[400px] space-y-6",
+            shake && "animate-shake",
+          )}
+        >
           {/* Back Button */}
           <button
             onClick={handleBackToLogin}
@@ -188,9 +232,13 @@ const OTPVerification = () => {
               <div className="p-2 bg-primary rounded-xl">
                 <GraduationCap className="h-8 w-8 text-primary-foreground" />
               </div>
-              <span className="text-2xl font-bold text-foreground">Dekho_Exam</span>
+              <span className="text-2xl font-bold text-foreground">
+                Dekho_Exam
+              </span>
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">OTP Verification</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-2">
+              OTP Verification
+            </h1>
             <p className="text-muted-foreground text-sm">
               Enter the 6-digit code sent to
             </p>
@@ -203,7 +251,9 @@ const OTPVerification = () => {
           {errors.general && (
             <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-fade-in">
               <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
-              <p className="text-sm text-destructive font-medium">{errors.general}</p>
+              <p className="text-sm text-destructive font-medium">
+                {errors.general}
+              </p>
             </div>
           )}
 
@@ -218,7 +268,7 @@ const OTPVerification = () => {
                 {otp.map((digit, index) => (
                   <input
                     key={index}
-                    ref={el => inputRefs.current[index] = el}
+                    ref={(el) => (inputRefs.current[index] = el)}
                     type="text"
                     inputMode="numeric"
                     maxLength={1}
@@ -231,7 +281,7 @@ const OTPVerification = () => {
                       "transition-all duration-200",
                       errors.otp || errors.general
                         ? "border-destructive focus:ring-destructive/20 focus:border-destructive"
-                        : "border-input hover:border-primary/50"
+                        : "border-input hover:border-primary/50",
                     )}
                   />
                 ))}
@@ -256,7 +306,10 @@ const OTPVerification = () => {
                 </button>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Resend OTP in <span className="font-medium text-foreground">{resendTimer}s</span>
+                  Resend OTP in{" "}
+                  <span className="font-medium text-foreground">
+                    {resendTimer}s
+                  </span>
                 </p>
               )}
             </div>
@@ -271,7 +324,7 @@ const OTPVerification = () => {
                 "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
                 "transition-all duration-200",
                 "disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:bg-primary",
-                "flex items-center justify-center gap-2"
+                "flex items-center justify-center gap-2",
               )}
             >
               {isLoading ? (
@@ -306,25 +359,28 @@ const OTPVerification = () => {
       </div>
 
       {/* Right Side - Branding */}
-      <div className={cn(
-        "hidden lg:flex w-1/2 relative overflow-hidden",
-        "bg-gradient-to-br from-primary via-primary to-violet-600"
-      )}>
+      <div
+        className={cn(
+          "hidden lg:flex w-1/2 relative overflow-hidden",
+          "bg-gradient-to-br from-primary via-primary to-violet-600",
+        )}
+      >
         {/* Decorative Background Elements */}
         <div className="absolute inset-0">
           {/* Circles */}
           <div className="absolute top-20 left-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
           <div className="absolute bottom-20 right-20 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-white/5 rounded-full blur-2xl" />
-          
+
           {/* Grid Pattern */}
-          <div className="absolute inset-0 opacity-10" 
+          <div
+            className="absolute inset-0 opacity-10"
             style={{
               backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-              backgroundSize: '40px 40px'
+              backgroundSize: "40px 40px",
             }}
           />
-          
+
           {/* Floating Elements */}
           <div className="absolute top-32 right-32 w-16 h-16 border-2 border-white/20 rounded-xl rotate-12 animate-float" />
           <div className="absolute bottom-40 left-24 w-12 h-12 border-2 border-white/20 rounded-full animate-float-delayed" />
@@ -332,10 +388,14 @@ const OTPVerification = () => {
         </div>
 
         {/* Content */}
-        <div className={cn(
-          "relative z-10 flex flex-col items-center justify-center w-full p-12 text-center text-white transition-all duration-1000 delay-300",
-          isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-        )}>
+        <div
+          className={cn(
+            "relative z-10 flex flex-col items-center justify-center w-full p-12 text-center text-white transition-all duration-1000 delay-300",
+            isPageLoaded
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-8",
+          )}
+        >
           {/* Main Illustration Area */}
           <div className="mb-8 p-8 bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20">
             <GraduationCap className="h-24 w-24 text-white" />
@@ -346,7 +406,8 @@ const OTPVerification = () => {
             India's #1 Exam Preparation Platform
           </h2>
           <p className="text-lg text-white/80 mb-8 max-w-md">
-            Empowering students to achieve their dreams with comprehensive exam preparation resources
+            Empowering students to achieve their dreams with comprehensive exam
+            preparation resources
           </p>
 
           {/* Stats */}

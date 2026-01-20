@@ -17,10 +17,17 @@ import Payments from "./pages/Payments";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import Login from "./pages/Login";
 import OTPVerification from "./pages/OtpVerifyPage";
+import ProtectedRoute from "./components/ProtectedRoute";
+import PublicRoute from "./components/PublicRoute";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -30,23 +37,24 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-<<<<<<< HEAD
-            <Route path="/" element = {<Login/>} />
-            <Route path="/otp-verification" element = {<OTPVerification/>} />
-=======
-            <Route path="/" element={<Login />} />
->>>>>>> 59df01b2f1f2bf8d642d1ce1e6c3b8e2a65a7986
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/subjects" element={<Subjects />} />
-            <Route path="/questions" element={<Questions />} />
-            <Route path="/topics" element={<Topics />} />
-            <Route path="/tests" element={<Tests />} />
-            <Route path="/subscriptions" element={<Subscriptions />} />
-            <Route path="/users" element={<Users />} />
-            <Route path="/payments" element={<Payments />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route element={<PublicRoute />}>
+              <Route path="/" element={<Login />} />
+              <Route path="/otp-verification" element={<OTPVerification />} />
+            </Route>
+
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/categories" element={<Categories />} />
+              <Route path="/subjects" element={<Subjects />} />
+              <Route path="/questions" element={<Questions />} />
+              <Route path="/topics" element={<Topics />} />
+              <Route path="/tests" element={<Tests />} />
+              <Route path="/subscriptions" element={<Subscriptions />} />
+              <Route path="/users" element={<Users />} />
+              <Route path="/payments" element={<Payments />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
