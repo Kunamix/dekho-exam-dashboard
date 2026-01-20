@@ -2,12 +2,18 @@ import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DataTable } from '@/components/common/DataTable';
 import { Modal } from '@/components/common/Modal';
-import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
-import { Download, Eye, Shield, User as UserIcon, CreditCard, ClipboardList, Ban, CheckCircle } from 'lucide-react';
-import { users as initialUsers, payments } from '@/data/mockData';
+import { 
+  Download, Eye, User as UserIcon, CreditCard, ClipboardList, 
+  Ban, CheckCircle, Loader2 
+} from 'lucide-react';
 import { toast } from 'sonner';
 
+// Hooks
+import { useUsers } from '@/hooks/useAdminData';
+import { useUpdateUserStatus ,useUserDetails } from '@/hooks/useAdminMutations';
+
+// Types
 interface User {
   id: string;
   phone: string;
@@ -22,12 +28,24 @@ interface User {
 }
 
 export const Users = () => {
-  const [users, setUsers] = useState<User[]>(initialUsers as User[]);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  // 1. Fetch Users List
+  const { data: usersData, isLoading: isUsersLoading } = useUsers();
+  
+  // 2. Mutations
+  const statusMutation = useUpdateUserStatus();
+
+  // 3. Local State
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'attempts'>('profile');
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+
+  // 4. Fetch User Details (Only when modal is open and ID is selected)
+  const { data: userDetails, isLoading: isDetailsLoading } = useUserDetails(selectedUserId);
+
+  // 5. Derived Data & Filtering
+  const users = (usersData as User[]) || [];
 
   const filteredUsers = users.filter((user) => {
     if (roleFilter && user.role !== roleFilter) return false;
@@ -35,23 +53,27 @@ export const Users = () => {
     return true;
   });
 
-  const handleViewUser = (user: User) => {
-    setSelectedUser(user);
-    setActiveTab('profile');
+  // Handlers
+  const handleViewUser = (userId: string) => {
+    setSelectedUserId(userId);
+    setActiveTab('profile'); // Reset tab to profile when opening
     setIsDetailModalOpen(true);
   };
 
-  const handleToggleStatus = (userId: string) => {
-    setUsers(users.map((u) =>
-      u.id === userId
-        ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' }
-        : u
-    ));
-    toast.success('User status updated');
+  const handleCloseModal = () => {
+    setIsDetailModalOpen(false);
+    setSelectedUserId(null); // Clear selection to reset hook and cache logic if needed
+  };
+
+  const handleToggleStatus = (user: User) => {
+    const newStatus = user.status === 'Active' ? 'Inactive' : 'Active';
+    // Optimistic update or wait for server response handled by React Query
+    statusMutation.mutate({ id: user.id, status: newStatus });
   };
 
   const handleExport = () => {
     toast.success('Exporting users to CSV...');
+    // In a real app: window.location.href = '/api/admin/users/export';
   };
 
   const columns = [
@@ -102,38 +124,40 @@ export const Users = () => {
       render: (item: User) => (
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => handleViewUser(item)}
+            onClick={() => handleViewUser(item.id)}
             className="p-2 rounded-lg hover:bg-muted transition-colors"
             title="View Details"
           >
             <Eye className="w-4 h-4" />
           </button>
           <button 
-            onClick={() => handleToggleStatus(item.id)}
-            className={`p-2 rounded-lg transition-colors ${
+            onClick={() => handleToggleStatus(item)}
+            disabled={statusMutation.isPending}
+            className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
               item.status === 'Active' 
                 ? 'hover:bg-destructive/10 text-destructive' 
                 : 'hover:bg-success/10 text-success'
             }`}
             title={item.status === 'Active' ? 'Block User' : 'Unblock User'}
           >
-            {item.status === 'Active' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+            {statusMutation.isPending ? (
+               <Loader2 className="w-4 h-4 animate-spin" />
+            ) : item.status === 'Active' ? (
+               <Ban className="w-4 h-4" />
+            ) : (
+               <CheckCircle className="w-4 h-4" />
+            )}
           </button>
         </div>
       )
     },
   ];
 
-  const userSubscriptions = [
-    { plan: 'SSC Complete', type: 'Category', startDate: '2024-01-01', endDate: '2024-06-30', status: 'Active', daysLeft: 163 },
-    { plan: 'Railway Master', type: 'Category', startDate: '2023-07-01', endDate: '2024-07-01', status: 'Active', daysLeft: 165 },
-  ];
-
-  const userAttempts = [
-    { test: 'SSC Constable Mock Test 1', category: 'SSC Constable', attemptedOn: '2024-01-17', score: '78/100', percentage: '78%' },
-    { test: 'Railway NTPC Mock Test 1', category: 'Railway NTPC', attemptedOn: '2024-01-15', score: '85/100', percentage: '85%' },
-    { test: 'Banking PO Prelims Mock', category: 'Banking PO', attemptedOn: '2024-01-12', score: '72/100', percentage: '72%' },
-  ];
+  // Helper variables for Detail View
+  // If `userDetails` (full data) is loading, fallback to the `selectedUser` from the list for basic info
+  const displayUser = userDetails?.profile || users.find(u => u.id === selectedUserId);
+  const userSubscriptions = userDetails?.subscriptions || [];
+  const userAttempts = userDetails?.attempts || [];
 
   return (
     <DashboardLayout 
@@ -169,21 +193,31 @@ export const Users = () => {
       </div>
 
       {/* Users Table */}
-      <DataTable
-        columns={columns}
-        data={filteredUsers}
-        searchPlaceholder="Search by name or phone..."
-        emptyMessage="No users found"
-      />
+      {isUsersLoading ? (
+         <div className="flex justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+         </div>
+      ) : (
+        <DataTable
+            columns={columns}
+            data={filteredUsers}
+            searchPlaceholder="Search by name or phone..."
+            emptyMessage="No users found"
+        />
+      )}
 
       {/* User Details Modal */}
       <Modal
         isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
+        onClose={handleCloseModal}
         title="User Details"
         size="xl"
       >
-        {selectedUser && (
+        {isDetailsLoading && !displayUser ? (
+           <div className="flex justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+           </div>
+        ) : displayUser ? (
           <div>
             {/* Tabs */}
             <div className="flex border-b border-border mb-4">
@@ -228,17 +262,17 @@ export const Users = () => {
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
                     <span className="text-2xl font-bold text-primary">
-                      {selectedUser.name.charAt(0)}
+                      {displayUser.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold">{selectedUser.name}</h3>
+                    <h3 className="text-xl font-semibold">{displayUser.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant={selectedUser.role === 'Admin' ? 'primary' : 'info'}>
-                        {selectedUser.role}
+                      <Badge variant={displayUser.role === 'Admin' ? 'primary' : 'info'}>
+                        {displayUser.role}
                       </Badge>
-                      <Badge variant={selectedUser.status === 'Active' ? 'success' : 'danger'}>
-                        {selectedUser.status}
+                      <Badge variant={displayUser.status === 'Active' ? 'success' : 'danger'}>
+                        {displayUser.status}
                       </Badge>
                     </div>
                   </div>
@@ -247,27 +281,27 @@ export const Users = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Phone</p>
-                    <p className="font-medium">{selectedUser.phone}</p>
+                    <p className="font-medium">{displayUser.phone}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{selectedUser.email}</p>
+                    <p className="font-medium">{displayUser.email}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Registered On</p>
-                    <p className="font-medium">{selectedUser.registeredOn}</p>
+                    <p className="font-medium">{displayUser.registeredOn}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Last Login</p>
-                    <p className="font-medium">{selectedUser.lastLogin}</p>
+                    <p className="font-medium">{displayUser.lastLogin}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Free Tests Used</p>
-                    <p className="font-medium">{selectedUser.freeTestsUsed}/2</p>
+                    <p className="font-medium">{displayUser.freeTestsUsed}/2</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Total Tests Attempted</p>
-                    <p className="font-medium">24</p>
+                    <p className="font-medium">{userAttempts.length || 0}</p>
                   </div>
                 </div>
               </div>
@@ -275,65 +309,83 @@ export const Users = () => {
 
             {activeTab === 'subscriptions' && (
               <div className="space-y-4">
-                {userSubscriptions.map((sub, index) => (
-                  <div key={index} className="p-4 border border-border rounded-lg">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-medium">{sub.plan}</h4>
-                        <Badge variant="info" >{sub.type}</Badge>
-                      </div>
-                      <Badge variant={sub.status === 'Active' ? 'success' : 'danger'}>
-                        {sub.status}
-                      </Badge>
+                {userSubscriptions.length > 0 ? (
+                    userSubscriptions.map((sub: any, index: number) => (
+                    <div key={index} className="p-4 border border-border rounded-lg">
+                        <div className="flex items-start justify-between">
+                        <div>
+                            <h4 className="font-medium">{sub.plan}</h4>
+                            <Badge variant="info" >{sub.type}</Badge>
+                        </div>
+                        <Badge variant={sub.status === 'Active' ? 'success' : 'danger'}>
+                            {sub.status}
+                        </Badge>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4 mt-4 text-sm">
+                        <div>
+                            <p className="text-muted-foreground">Start Date</p>
+                            <p className="font-medium">{sub.startDate}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">End Date</p>
+                            <p className="font-medium">{sub.endDate}</p>
+                        </div>
+                        <div>
+                            <p className="text-muted-foreground">Days Left</p>
+                            <p className="font-medium text-success">{sub.daysLeft} days</p>
+                        </div>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 mt-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Start Date</p>
-                        <p className="font-medium">{sub.startDate}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">End Date</p>
-                        <p className="font-medium">{sub.endDate}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Days Left</p>
-                        <p className="font-medium text-success">{sub.daysLeft} days</p>
-                      </div>
+                    ))
+                ) : (
+                    <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+                        No active subscriptions found.
                     </div>
-                  </div>
-                ))}
+                )}
               </div>
             )}
 
             {activeTab === 'attempts' && (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto border border-border rounded-lg">
                 <table className="w-full">
                   <thead>
-                    <tr className="table-header">
-                      <th className="px-4 py-3">Test Name</th>
-                      <th className="px-4 py-3">Category</th>
-                      <th className="px-4 py-3">Attempted On</th>
-                      <th className="px-4 py-3">Score</th>
-                      <th className="px-4 py-3">Percentage</th>
+                    <tr className="bg-muted/50 border-b border-border">
+                      <th className="px-4 py-3 text-left text-sm font-medium">Test Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Category</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Attempted On</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Score</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Percentage</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {userAttempts.map((attempt, index) => (
-                      <tr key={index} className="table-row">
-                        <td className="table-cell font-medium">{attempt.test}</td>
-                        <td className="table-cell">{attempt.category}</td>
-                        <td className="table-cell">{attempt.attemptedOn}</td>
-                        <td className="table-cell">{attempt.score}</td>
-                        <td className="table-cell">
-                          <Badge variant="success">{attempt.percentage}</Badge>
-                        </td>
-                      </tr>
-                    ))}
+                    {userAttempts.length > 0 ? (
+                        userAttempts.map((attempt: any, index: number) => (
+                        <tr key={index} className="border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
+                            <td className="px-4 py-3 font-medium text-sm">{attempt.test}</td>
+                            <td className="px-4 py-3 text-sm">{attempt.category}</td>
+                            <td className="px-4 py-3 text-sm">{attempt.attemptedOn}</td>
+                            <td className="px-4 py-3 text-sm">{attempt.score}</td>
+                            <td className="px-4 py-3">
+                            <Badge variant="success">{attempt.percentage}</Badge>
+                            </td>
+                        </tr>
+                        ))
+                    ) : (
+                        <tr>
+                            <td colSpan={5} className="text-center py-8 text-muted-foreground">
+                                No tests attempted yet.
+                            </td>
+                        </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
+        ) : (
+            <div className="text-center py-10 text-destructive">
+                Failed to load user details. Please try again.
+            </div>
         )}
       </Modal>
     </DashboardLayout>

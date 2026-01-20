@@ -1,20 +1,20 @@
 import { useState } from 'react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+} from 'recharts';
+import { 
+  Download, Eye, RotateCcw, DollarSign, TrendingUp, CheckCircle, XCircle, Calendar, Loader2 
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+// Components
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DataTable } from '@/components/common/DataTable';
 import { StatsCard } from '@/components/common/StatsCard';
 import { Badge } from '@/components/common/Badge';
-import { Download, Eye, RotateCcw, DollarSign, TrendingUp, CheckCircle, XCircle, Calendar } from 'lucide-react';
-import { payments as initialPayments, monthlyRevenue } from '@/data/mockData';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
-} from 'recharts';
-import { toast } from 'sonner';
+
+// Hooks
+import { usePayments, useRevenueAnalytics } from '@/hooks/useAdminData';
 
 interface Payment {
   id: string;
@@ -29,14 +29,23 @@ interface Payment {
 }
 
 export const Payments = () => {
-  const [payments] = useState<Payment[]>(initialPayments as Payment[]);
+  // 1. Fetch Data
+  const { data: paymentsData, isLoading: isPaymentsLoading } = usePayments();
+  const { data: revenueData, isLoading: isRevenueLoading } = useRevenueAnalytics();
+
+  // 2. Local State
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // 3. Derived Data (Safe Defaults)
+  const payments = (paymentsData as Payment[]) || [];
+  const monthlyRevenue = revenueData?.monthlyRevenue || [];
 
   const handleExport = () => {
     toast.success('Exporting payment report...');
   };
 
+  // Calculate stats dynamically from the fetched data
   const totalRevenue = payments
     .filter((p) => p.status === 'Success')
     .reduce((sum, p) => sum + p.amount, 0);
@@ -114,6 +123,18 @@ export const Payments = () => {
     }).format(value);
   };
 
+  const isLoading = isPaymentsLoading || isRevenueLoading;
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Payments & Revenue">
+        <div className="flex h-[80vh] w-full items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout 
       title="Payments & Revenue" 
@@ -155,9 +176,9 @@ export const Payments = () => {
         />
         <StatsCard
           title="This Month"
-          value={formatCurrency(534000)}
+          value={formatCurrency(revenueData?.currentMonthRevenue || 0)}
           icon={TrendingUp}
-          change={18.3}
+          change={18.3} // You could calculate this dynamically if previous month data exists
           variant="success"
         />
         <StatsCard
@@ -177,34 +198,42 @@ export const Payments = () => {
       {/* Revenue Chart */}
       <div className="dashboard-card p-6 mb-8">
         <h3 className="section-title mb-4">Monthly Revenue (Last 12 Months)</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={monthlyRevenue}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis 
-              dataKey="month" 
-              tick={{ fontSize: 12 }}
-              stroke="hsl(var(--muted-foreground))"
-            />
-            <YAxis 
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => `₹${(value / 1000)}k`}
-              stroke="hsl(var(--muted-foreground))"
-            />
-            <Tooltip 
-              formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-              contentStyle={{ 
-                backgroundColor: 'hsl(var(--card))', 
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px'
-              }}
-            />
-            <Bar 
-              dataKey="revenue" 
-              fill="hsl(var(--primary))" 
-              radius={[4, 4, 0, 0]}
-            />
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="w-full h-[300px]">
+          {monthlyRevenue.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyRevenue}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis 
+                  dataKey="month" 
+                  tick={{ fontSize: 12 }}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => `₹${(value / 1000)}k`}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <Tooltip 
+                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                />
+                <Bar 
+                  dataKey="revenue" 
+                  fill="hsl(var(--primary))" 
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+             <div className="flex h-full items-center justify-center text-muted-foreground">
+               No revenue data available
+             </div>
+          )}
+        </div>
       </div>
 
       {/* Payments Table */}

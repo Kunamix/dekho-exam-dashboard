@@ -4,10 +4,22 @@ import { DataTable } from '@/components/common/DataTable';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
-import { Plus, Upload, Edit, Trash2, Eye, Download, CheckCircle, XCircle } from 'lucide-react';
-import { questions as initialQuestions, subjects, topics } from '@/data/mockData';
+import { Plus, Upload, Edit, Trash2, Eye, Download, CheckCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Hooks
+import { 
+  useQuestions, 
+  useSubjects, 
+  useTopics 
+} from '@/hooks/useAdminData';
+import { 
+  useCreateQuestion, 
+  useUpdateQuestion, 
+  useDeleteQuestion 
+} from '@/hooks/useAdminMutations';
+
+// Types (You can move this to a shared types file)
 interface Question {
   id: string;
   subjectId: string;
@@ -22,13 +34,32 @@ interface Question {
 }
 
 export const Questions = () => {
-  const [questions, setQuestions] = useState<Question[]>(initialQuestions as Question[]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  // 1. Local Filter State
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedTopic, setSelectedTopic] = useState<string>('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
+
+  // 2. Data Hooks
+  const { data: subjectsData = [] } = useSubjects();
+  // Fetch topics based on selected subject (or all if none selected)
+  const { data: topicsData = [] } = useTopics(selectedSubject); 
+  
+  // Fetch questions based on active filters
+  const { data: questionsData, isLoading: isQuestionsLoading } = useQuestions({
+    subjectId: selectedSubject,
+    topicId: selectedTopic,
+    // Note: If your API supports filtering by difficulty, add it here
+  });
+
+  // 3. Mutation Hooks
+  const createMutation = useCreateQuestion();
+  const updateMutation = useUpdateQuestion();
+  const deleteMutation = useDeleteQuestion();
+
+  // 4. UI State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   
   const [formData, setFormData] = useState({
     subjectId: '',
@@ -44,10 +75,18 @@ export const Questions = () => {
     isActive: true,
   });
 
-  const filteredTopics = selectedSubject
-    ? topics.filter((t) => t.subjectId === selectedSubject)
-    : topics;
+  // Filter questions locally by difficulty if API doesn't support it yet
+  const questions = (questionsData || []).filter((q: Question) => 
+    !selectedDifficulty || q.difficulty === selectedDifficulty
+  );
 
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  // Helper Lookups
+  const getSubjectName = (id: string) => subjectsData.find((s: any) => s.id === id)?.name || 'Unknown';
+  const getTopicName = (id: string) => topicsData.find((t: any) => t.id === id)?.name || 'Unknown';
+
+  // Handlers
   const handleOpenModal = (question?: Question) => {
     if (question) {
       setEditingQuestion(question);
@@ -67,8 +106,8 @@ export const Questions = () => {
     } else {
       setEditingQuestion(null);
       setFormData({
-        subjectId: '',
-        topicId: '',
+        subjectId: selectedSubject || '', // Pre-fill if filter is active
+        topicId: selectedTopic || '',
         text: '',
         option1: '',
         option2: '',
@@ -83,7 +122,7 @@ export const Questions = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.text.trim() || !formData.subjectId || !formData.topicId) {
@@ -96,8 +135,8 @@ export const Questions = () => {
       return;
     }
 
-    const questionData: Question = {
-      id: editingQuestion?.id || String(Date.now()),
+    // Prepare payload
+    const payload = {
       subjectId: formData.subjectId,
       topicId: formData.topicId,
       text: formData.text,
@@ -106,29 +145,35 @@ export const Questions = () => {
       difficulty: formData.difficulty,
       explanation: formData.explanation,
       isActive: formData.isActive,
-      createdAt: editingQuestion?.createdAt || new Date().toISOString().split('T')[0],
     };
 
-    if (editingQuestion) {
-      setQuestions(questions.map((q) => q.id === editingQuestion.id ? questionData : q));
-      toast.success('Question updated successfully');
-    } else {
-      setQuestions([...questions, questionData]);
-      toast.success('Question created successfully');
+    try {
+      if (editingQuestion) {
+        await updateMutation.mutateAsync({ 
+          id: editingQuestion.id, 
+          data: payload 
+        });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error(error);
     }
-    
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this question?')) {
-      setQuestions(questions.filter((q) => q.id !== id));
-      toast.success('Question deleted successfully');
+      await deleteMutation.mutateAsync(id);
     }
   };
 
-  const getSubjectName = (id: string) => subjects.find((s) => s.id === id)?.name || 'Unknown';
-  const getTopicName = (id: string) => topics.find((t) => t.id === id)?.name || 'Unknown';
+  const handleToggleActive = (id: string, currentStatus: boolean) => {
+    updateMutation.mutate({ 
+      id, 
+      data: { isActive: !currentStatus } 
+    });
+  };
 
   const difficultyVariant = {
     Easy: 'success' as const,
@@ -141,14 +186,14 @@ export const Questions = () => {
       key: 'text', 
       label: 'Question',
       render: (item: Question) => (
-        <span className="line-clamp-2 max-w-md">{item.text}</span>
+        <span className="line-clamp-2 max-w-md" title={item.text}>{item.text}</span>
       )
     },
     { 
       key: 'subject', 
       label: 'Subject → Topic',
       render: (item: Question) => (
-        <span className="text-sm">
+        <span className="text-sm text-muted-foreground">
           {getSubjectName(item.subjectId)} → {getTopicName(item.topicId)}
         </span>
       )
@@ -167,11 +212,7 @@ export const Questions = () => {
       render: (item: Question) => (
         <Toggle
           checked={item.isActive}
-          onChange={(checked) => {
-            setQuestions(questions.map((q) =>
-              q.id === item.id ? { ...q, isActive: checked } : q
-            ));
-          }}
+          onChange={() => handleToggleActive(item.id, item.isActive)}
         />
       )
     },
@@ -186,14 +227,22 @@ export const Questions = () => {
           >
             <Edit className="w-4 h-4" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors">
+          <button 
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
+            title="Preview Question"
+          >
             <Eye className="w-4 h-4" />
           </button>
           <button 
             onClick={() => handleDelete(item.id)}
-            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+            disabled={deleteMutation.isPending}
+            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
+            {deleteMutation.isPending && editingQuestion?.id === item.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+                <Trash2 className="w-4 h-4" />
+            )}
           </button>
         </div>
       )
@@ -208,30 +257,36 @@ export const Questions = () => {
       {/* Top Section */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-3">
+          {/* Subject Filter */}
           <select
             value={selectedSubject}
             onChange={(e) => {
               setSelectedSubject(e.target.value);
-              setSelectedTopic('');
+              setSelectedTopic(''); // Reset topic when subject changes
             }}
             className="input-field w-48"
           >
             <option value="">All Subjects</option>
-            {subjects.map((sub) => (
+            {subjectsData.map((sub: any) => (
               <option key={sub.id} value={sub.id}>{sub.name}</option>
             ))}
           </select>
+
+          {/* Topic Filter */}
           <select
             value={selectedTopic}
             onChange={(e) => setSelectedTopic(e.target.value)}
             className="input-field w-48"
-            disabled={!selectedSubject}
+            // We allow selecting topics even without subject if API supports it, 
+            // otherwise disable: disabled={!selectedSubject}
           >
             <option value="">All Topics</option>
-            {filteredTopics.map((topic) => (
+            {topicsData.map((topic: any) => (
               <option key={topic.id} value={topic.id}>{topic.name}</option>
             ))}
           </select>
+
+          {/* Difficulty Filter */}
           <select
             value={selectedDifficulty}
             onChange={(e) => setSelectedDifficulty(e.target.value)}
@@ -243,6 +298,7 @@ export const Questions = () => {
             <option value="Hard">Hard</option>
           </select>
         </div>
+
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsBulkModalOpen(true)} 
@@ -259,12 +315,18 @@ export const Questions = () => {
       </div>
 
       {/* Questions Table */}
-      <DataTable
-        columns={columns}
-        data={questions}
-        searchPlaceholder="Search questions..."
-        emptyMessage="No questions found"
-      />
+      {isQuestionsLoading ? (
+         <div className="flex justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+         </div>
+      ) : (
+        <DataTable
+            columns={columns}
+            data={questions}
+            searchPlaceholder="Search questions..."
+            emptyMessage="No questions found"
+        />
+      )}
 
       {/* Add/Edit Question Modal */}
       <Modal
@@ -283,9 +345,10 @@ export const Questions = () => {
                 value={formData.subjectId}
                 onChange={(e) => setFormData({ ...formData, subjectId: e.target.value, topicId: '' })}
                 className="input-field"
+                disabled={isSubmitting}
               >
                 <option value="">Select Subject</option>
-                {subjects.map((sub) => (
+                {subjectsData.map((sub: any) => (
                   <option key={sub.id} value={sub.id}>{sub.name}</option>
                 ))}
               </select>
@@ -298,11 +361,14 @@ export const Questions = () => {
                 value={formData.topicId}
                 onChange={(e) => setFormData({ ...formData, topicId: e.target.value })}
                 className="input-field"
-                disabled={!formData.subjectId}
+                // Only show topics for selected subject in the form
+                disabled={!formData.subjectId || isSubmitting}
               >
                 <option value="">Select Topic</option>
-                {topics.filter((t) => t.subjectId === formData.subjectId).map((topic) => (
-                  <option key={topic.id} value={topic.id}>{topic.name}</option>
+                {topicsData
+                    .filter((t: any) => t.subjectId === formData.subjectId)
+                    .map((topic: any) => (
+                    <option key={topic.id} value={topic.id}>{topic.name}</option>
                 ))}
               </select>
             </div>
@@ -317,9 +383,11 @@ export const Questions = () => {
               onChange={(e) => setFormData({ ...formData, text: e.target.value })}
               className="input-field min-h-[80px] resize-none"
               placeholder="Enter the question"
+              disabled={isSubmitting}
             />
           </div>
 
+          {/* Options Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((num) => (
               <div key={num} className="relative">
@@ -333,6 +401,7 @@ export const Questions = () => {
                     onChange={(e) => setFormData({ ...formData, [`option${num}`]: e.target.value })}
                     className="input-field pr-10"
                     placeholder={`Option ${num}`}
+                    disabled={isSubmitting}
                   />
                   <button
                     type="button"
@@ -358,6 +427,7 @@ export const Questions = () => {
               onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
               className="input-field min-h-[80px] resize-none"
               placeholder="Enter explanation for the correct answer"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -368,6 +438,7 @@ export const Questions = () => {
                 value={formData.difficulty}
                 onChange={(e) => setFormData({ ...formData, difficulty: e.target.value as 'Easy' | 'Medium' | 'Hard' })}
                 className="input-field"
+                disabled={isSubmitting}
               >
                 <option value="Easy">Easy</option>
                 <option value="Medium">Medium</option>
@@ -384,17 +455,27 @@ export const Questions = () => {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 btn-outline">
+            <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="flex-1 btn-outline"
+                disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="flex-1 btn-primary">
+            <button 
+                type="submit" 
+                className="flex-1 btn-primary flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingQuestion ? 'Update' : 'Create'} Question
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* Bulk Upload Modal */}
+      {/* Bulk Upload Modal (Unchanged logic, just UI) */}
       <Modal
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}

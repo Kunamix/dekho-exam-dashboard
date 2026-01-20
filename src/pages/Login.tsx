@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
-  GraduationCap,
   Mail,
   Lock,
   Eye,
@@ -21,12 +20,13 @@ import api from "@/lib/api";
 const Login = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  // State
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
@@ -36,10 +36,12 @@ const Login = () => {
   const [shake, setShake] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
 
+  // Animation on mount
   useEffect(() => {
     setTimeout(() => setIsPageLoaded(true), 100);
   }, []);
 
+  // Validation Helpers
   const validateEmail = (email: string): boolean => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
@@ -48,9 +50,9 @@ const Login = () => {
     return /^\d{10}$/.test(phone);
   };
 
-  // 1. Define the login Mutation
+  // Login Mutation
   const loginMutation = useMutation({
-    mutationFn: async (credentials:any) => {
+    mutationFn: async (credentials: any) => {
       const response = await api.post("/auth/admin-login", credentials);
       return response.data;
     },
@@ -75,6 +77,7 @@ const Login = () => {
     },
   });
 
+  // Form Submission
   const validateForm = (): boolean => {
     const newErrors: typeof errors = {};
 
@@ -106,38 +109,34 @@ const Login = () => {
     }
 
     const payload = { email, password, phoneNumber };
-
     loginMutation.mutate(payload);
   };
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Left Side - Login Form */}
+    <div className="min-h-screen flex bg-background overflow-hidden">
+      {/* --- Left Side: Login Form --- */}
       <div
         className={cn(
           "w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 md:p-12 transition-all duration-700",
-          isPageLoaded
-            ? "opacity-100 translate-y-0"
-            : "opacity-0 translate-y-4",
+          isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
         )}
       >
         <div
           className={cn(
-            "w-full max-w-[400px] space-y-6",
-            shake && "animate-shake",
+            "w-full max-w-[400px] space-y-8",
+            shake && "animate-shake"
           )}
         >
-          {/* Logo */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 mb-4">
-              <div className="p-2 bg-primary rounded-xl">
-                <GraduationCap className="h-8 w-8 text-primary-foreground" />
-              </div>
-              <span className="text-2xl font-bold text-foreground">
-                Dekho_Exam
-              </span>
+          {/* Header & Logo */}
+          <div className="text-center space-y-2">
+            <div className="flex justify-center mb-4">
+              <img 
+                src="/images/logo.png" 
+                alt="Dekho Exam Logo" 
+                className="h-12 w-auto object-contain" 
+              />
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Admin Login
             </h1>
             <p className="text-muted-foreground text-sm">
@@ -146,20 +145,20 @@ const Login = () => {
           </div>
 
           {/* Toggle Switch */}
-          <div className="flex p-1 bg-muted rounded-lg">
+          <div className="flex p-1 bg-muted/50 rounded-lg border border-border/50">
             <button
               onClick={() => {
                 setLoginMethod("email");
                 setErrors({});
               }}
               className={cn(
-                "flex-1 py-2 text-sm font-medium rounded-md transition-all",
+                "flex-1 py-2.5 text-sm font-medium rounded-md transition-all duration-200",
                 loginMethod === "email"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-primary shadow-sm border border-border/50"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
-              Email
+              Email Login
             </button>
             <button
               onClick={() => {
@@ -167,18 +166,19 @@ const Login = () => {
                 setErrors({});
               }}
               className={cn(
-                "flex-1 py-2 text-sm font-medium rounded-md transition-all",
+                "flex-1 py-2.5 text-sm font-medium rounded-md transition-all duration-200",
                 loginMethod === "phone"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-background text-primary shadow-sm border border-border/50"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
-              Phone
+              Phone Login
             </button>
           </div>
 
+          {/* General Error Alert */}
           {errors.general && (
-            <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-fade-in">
+            <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
               <p className="text-sm text-destructive font-medium">
                 {errors.general}
@@ -186,23 +186,22 @@ const Login = () => {
             </div>
           )}
 
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             {loginMethod === "email" ? (
               <>
                 <div className="space-y-2">
                   <label
                     htmlFor="email"
-                    className="block text-sm font-medium text-foreground"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
                     Email Address
                   </label>
                   <div className="relative">
                     <Mail
                       className={cn(
-                        "absolute left-3 top-3.5 h-5 w-5",
-                        errors.email
-                          ? "text-destructive"
-                          : "text-muted-foreground",
+                        "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors",
+                        errors.email ? "text-destructive" : "text-muted-foreground"
                       )}
                     />
                     <input
@@ -212,13 +211,13 @@ const Login = () => {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="admin@dekhoexam.com"
                       className={cn(
-                        "w-full pl-10 pr-4 py-3 rounded-lg border bg-background text-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary",
-                        errors.email ? "border-destructive" : "border-input",
+                        "flex h-12 w-full rounded-lg border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
+                        errors.email ? "border-destructive focus-visible:ring-destructive" : "border-input"
                       )}
                     />
                   </div>
                   {errors.email && (
-                    <p className="text-xs text-destructive flex items-center gap-1">
+                    <p className="text-xs text-destructive flex items-center gap-1 font-medium">
                       <AlertCircle className="h-3 w-3" />
                       {errors.email}
                     </p>
@@ -228,17 +227,15 @@ const Login = () => {
                 <div className="space-y-2">
                   <label
                     htmlFor="password"
-                    className="block text-sm font-medium text-foreground"
+                    className="text-sm font-medium leading-none"
                   >
                     Password
                   </label>
                   <div className="relative">
                     <Lock
                       className={cn(
-                        "absolute left-3 top-3.5 h-5 w-5",
-                        errors.password
-                          ? "text-destructive"
-                          : "text-muted-foreground",
+                        "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors",
+                        errors.password ? "text-destructive" : "text-muted-foreground"
                       )}
                     />
                     <input
@@ -248,14 +245,14 @@ const Login = () => {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
                       className={cn(
-                        "w-full pl-10 pr-12 py-3 rounded-lg border bg-background text-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary",
-                        errors.password ? "border-destructive" : "border-input",
+                        "flex h-12 w-full rounded-lg border bg-background px-10 pr-12 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all",
+                        errors.password ? "border-destructive focus-visible:ring-destructive" : "border-input"
                       )}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3.5 text-muted-foreground hover:text-foreground"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
                     >
                       {showPassword ? (
                         <EyeOff className="h-5 w-5" />
@@ -265,7 +262,7 @@ const Login = () => {
                     </button>
                   </div>
                   {errors.password && (
-                    <p className="text-xs text-destructive flex items-center gap-1">
+                    <p className="text-xs text-destructive flex items-center gap-1 font-medium">
                       <AlertCircle className="h-3 w-3" />
                       {errors.password}
                     </p>
@@ -276,17 +273,15 @@ const Login = () => {
               <div className="space-y-2">
                 <label
                   htmlFor="phone"
-                  className="block text-sm font-medium text-foreground"
+                  className="text-sm font-medium leading-none"
                 >
                   Phone Number
                 </label>
                 <div className="relative">
                   <Phone
                     className={cn(
-                      "absolute left-3 top-3.5 h-5 w-5",
-                      errors.phone
-                        ? "text-destructive"
-                        : "text-muted-foreground",
+                      "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors",
+                      errors.phone ? "text-destructive" : "text-muted-foreground"
                     )}
                   />
                   <input
@@ -299,13 +294,13 @@ const Login = () => {
                     }
                     placeholder="Enter 10-digit number"
                     className={cn(
-                      "w-full pl-10 pr-4 py-3 rounded-lg border bg-background text-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary",
-                      errors.phone ? "border-destructive" : "border-input",
+                      "flex h-12 w-full rounded-lg border bg-background px-10 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all",
+                      errors.phone ? "border-destructive focus-visible:ring-destructive" : "border-input"
                     )}
                   />
                 </div>
                 {errors.phone && (
-                  <p className="text-xs text-destructive flex items-center gap-1">
+                  <p className="text-xs text-destructive flex items-center gap-1 font-medium">
                     <AlertCircle className="h-3 w-3" />
                     {errors.phone}
                   </p>
@@ -315,39 +310,36 @@ const Login = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full py-3 px-4 rounded-lg font-semibold text-primary-foreground bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 disabled:opacity-70 flex items-center justify-center gap-2"
+              disabled={loginMutation.isPending}
+              className="w-full h-12 rounded-lg font-semibold text-primary-foreground bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
             >
-              {isLoading ? (
+              {loginMutation.isPending ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
                   <span>Processing...</span>
                 </>
               ) : (
-                <span>{loginMethod === "email" ? "Login" : "Send OTP"}</span>
+                <span>{loginMethod === "email" ? "Login Dashboard" : "Send Verification Code"}</span>
               )}
             </button>
           </form>
 
-          {/* Security & Footer */}
-          <div className="pt-4 space-y-4">
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <Shield className="h-4 w-4" />
+          {/* Footer */}
+          <div className="pt-6 space-y-4">
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-muted/30 py-2 rounded-full">
+              <Shield className="h-3.5 w-3.5 text-primary" />
               <span>Secure Login with SSL Encryption</span>
             </div>
-            <p className="text-center text-xs text-muted-foreground">
-              © 2024 Dekho_Exam. All rights reserved.
+            <p className="text-center text-xs text-muted-foreground/60">
+              © 2026 Dekho_Exam. All rights reserved.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Right Side - Branding (Unchanged) */}
-      <div
-        className={cn(
-          "hidden lg:flex w-1/2 relative overflow-hidden bg-gradient-to-br from-primary via-primary to-violet-600",
-        )}
-      >
+      {/* --- Right Side: Branding --- */}
+      <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-gradient-to-br from-primary via-violet-600 to-indigo-700">
+        {/* Background Patterns */}
         <div
           className="absolute inset-0 opacity-10"
           style={{
@@ -355,38 +347,50 @@ const Login = () => {
             backgroundSize: "40px 40px",
           }}
         />
+        
+        {/* Floating Circles for ambiance */}
+        <div className="absolute top-20 left-20 w-32 h-32 bg-white/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-20 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" />
+
         <div
           className={cn(
             "relative z-10 flex flex-col items-center justify-center w-full p-12 text-center text-white transition-all duration-1000 delay-300",
-            isPageLoaded
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-8",
+            isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
           )}
         >
-          <div className="mb-8 p-8 bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20">
-            <GraduationCap className="h-24 w-24 text-white" />
+          {/* Right Logo Container - Fixed Layout */}
+          <div className="mb-10 p-6 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl">
+            <img 
+              src="/images/logo.png" 
+              alt="Dekho Exam Logo" 
+              className="h-16 w-auto object-contain drop-shadow-md"
+            />
           </div>
-          <h2 className="text-3xl font-bold mb-4">
-            India's #1 Exam Preparation Platform
+
+          <h2 className="text-4xl font-bold mb-6 tracking-tight">
+            India's #1 Exam <br/> Preparation Platform
           </h2>
-          <p className="text-lg text-white/80 mb-8 max-w-md">
-            Empowering students with comprehensive resources
+          <p className="text-lg text-white/80 mb-12 max-w-md leading-relaxed">
+            Empowering students with comprehensive resources, real-time analytics, and expert guidance.
           </p>
-          <div className="flex items-center gap-8">
-            <div className="text-center">
-              <div className="flex items-center justify-center w-14 h-14 bg-white/10 rounded-xl mb-2">
-                <Users className="h-7 w-7" />
+
+          <div className="flex items-center gap-12">
+            <div className="text-center group">
+              <div className="flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-3 border border-white/10 group-hover:bg-white/20 transition-all duration-300">
+                <Users className="h-8 w-8 text-white" />
               </div>
-              <p className="text-2xl font-bold">10K+</p>
-              <p className="text-sm text-white/70">Students</p>
+              <p className="text-3xl font-bold">10K+</p>
+              <p className="text-sm text-white/70 font-medium tracking-wide">STUDENTS</p>
             </div>
-            <div className="w-px h-16 bg-white/20" />
-            <div className="text-center">
-              <div className="flex items-center justify-center w-14 h-14 bg-white/10 rounded-xl mb-2">
-                <BookOpen className="h-7 w-7" />
+            
+            <div className="w-px h-24 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+            
+            <div className="text-center group">
+              <div className="flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-3 border border-white/10 group-hover:bg-white/20 transition-all duration-300">
+                <BookOpen className="h-8 w-8 text-white" />
               </div>
-              <p className="text-2xl font-bold">100+</p>
-              <p className="text-sm text-white/70">Exams</p>
+              <p className="text-3xl font-bold">100+</p>
+              <p className="text-sm text-white/70 font-medium tracking-wide">EXAMS</p>
             </div>
           </div>
         </div>
@@ -395,10 +399,10 @@ const Login = () => {
       <style>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
-          10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-          20%, 40%, 60%, 80% { transform: translateX(5px); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+          20%, 40%, 60%, 80% { transform: translateX(4px); }
         }
-        .animate-shake { animation: shake 0.5s ease-in-out; }
+        .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
       `}</style>
     </div>
   );

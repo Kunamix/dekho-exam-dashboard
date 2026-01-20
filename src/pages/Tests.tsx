@@ -4,10 +4,22 @@ import { DataTable } from '@/components/common/DataTable';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
-import { Plus, Edit, Trash2, Eye, Clock, FileQuestion, Award } from 'lucide-react';
-import { tests as initialTests, categories, subjects } from '@/data/mockData';
+import { Plus, Edit, Trash2, Eye, Clock, FileQuestion, Award, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Hooks
+import { 
+  useTests, 
+  useCategories, 
+  useSubjects 
+} from '@/hooks/useAdminData';
+import { 
+  useCreateTest, 
+  useUpdateTest, 
+  useDeleteTest 
+} from '@/hooks/useAdminMutations';
+
+// Types
 interface Test {
   id: string;
   name: string;
@@ -23,12 +35,25 @@ interface Test {
 }
 
 export const Tests = () => {
-  const [tests, setTests] = useState<Test[]>(initialTests as Test[]);
+  // 1. Fetch Data
+  const { data: testsData, isLoading: isTestsLoading } = useTests();
+  const { data: categoriesData = [] } = useCategories();
+  const { data: subjectsData = [] } = useSubjects();
+
+  // 2. Mutations
+  const createMutation = useCreateTest();
+  const updateMutation = useUpdateTest();
+  const deleteMutation = useDeleteTest();
+
+  // 3. Local State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<Test | null>(null);
+  
+  // Filters
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('');
   
+  // Form State
   const [formData, setFormData] = useState({
     name: '',
     categoryId: '',
@@ -42,12 +67,21 @@ export const Tests = () => {
     isActive: true,
   });
 
+  // 4. Derived Data
+  const tests = (testsData as Test[]) || [];
+
   const filteredTests = tests.filter((test) => {
     if (selectedCategory && test.categoryId !== selectedCategory) return false;
     if (selectedType && test.type !== selectedType) return false;
     return true;
   });
 
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  // Helpers
+  const getCategoryName = (id: string) => categoriesData.find((c: any) => c.id === id)?.name || 'Unknown';
+
+  // Handlers
   const handleOpenModal = (test?: Test) => {
     if (test) {
       setEditingTest(test);
@@ -81,7 +115,7 @@ export const Tests = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim() || !formData.categoryId) {
@@ -89,30 +123,33 @@ export const Tests = () => {
       return;
     }
 
-    const testData: Test = {
-      id: editingTest?.id || String(Date.now()),
-      ...formData,
-    };
-
-    if (editingTest) {
-      setTests(tests.map((t) => t.id === editingTest.id ? testData : t));
-      toast.success('Test updated successfully');
-    } else {
-      setTests([...tests, testData]);
-      toast.success('Test created successfully');
+    try {
+      if (editingTest) {
+        await updateMutation.mutateAsync({ 
+          id: editingTest.id, 
+          data: formData 
+        });
+      } else {
+        await createMutation.mutateAsync(formData);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error(error);
     }
-    
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this test?')) {
-      setTests(tests.filter((t) => t.id !== id));
-      toast.success('Test deleted successfully');
+      await deleteMutation.mutateAsync(id);
     }
   };
 
-  const getCategoryName = (id: string) => categories.find((c) => c.id === id)?.name || 'Unknown';
+  const handleToggleActive = (id: string, currentStatus: boolean) => {
+    updateMutation.mutate({ 
+      id, 
+      data: { isActive: !currentStatus } 
+    });
+  };
 
   const columns = [
     { key: 'name', label: 'Test Name', sortable: true },
@@ -165,11 +202,7 @@ export const Tests = () => {
       render: (item: Test) => (
         <Toggle
           checked={item.isActive}
-          onChange={(checked) => {
-            setTests(tests.map((t) =>
-              t.id === item.id ? { ...t, isActive: checked } : t
-            ));
-          }}
+          onChange={() => handleToggleActive(item.id, item.isActive)}
         />
       )
     },
@@ -189,16 +222,19 @@ export const Tests = () => {
           </button>
           <button 
             onClick={() => handleDelete(item.id)}
-            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+            disabled={deleteMutation.isPending}
+            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
+             {deleteMutation.isPending && editingTest?.id === item.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+             ) : (
+                <Trash2 className="w-4 h-4" />
+             )}
           </button>
         </div>
       )
     },
   ];
-
-  const selectedCategoryData = categories.find((c) => c.id === formData.categoryId);
 
   return (
     <DashboardLayout 
@@ -214,7 +250,7 @@ export const Tests = () => {
             className="input-field w-48"
           >
             <option value="">All Categories</option>
-            {categories.map((cat) => (
+            {categoriesData.map((cat: any) => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
@@ -235,12 +271,18 @@ export const Tests = () => {
       </div>
 
       {/* Tests Table */}
-      <DataTable
-        columns={columns}
-        data={filteredTests}
-        searchPlaceholder="Search tests..."
-        emptyMessage="No tests found"
-      />
+      {isTestsLoading ? (
+         <div className="flex justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+         </div>
+      ) : (
+        <DataTable
+            columns={columns}
+            data={filteredTests}
+            searchPlaceholder="Search tests..."
+            emptyMessage="No tests found"
+        />
+      )}
 
       {/* Add/Edit Test Modal */}
       <Modal
@@ -260,6 +302,7 @@ export const Tests = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="input-field"
               placeholder="Enter test name"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -271,9 +314,10 @@ export const Tests = () => {
               value={formData.categoryId}
               onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
               className="input-field"
+              disabled={isSubmitting}
             >
               <option value="">Select Category</option>
-              {categories.map((cat) => (
+              {categoriesData.map((cat: any) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
@@ -286,7 +330,7 @@ export const Tests = () => {
                 Question Distribution for {getCategoryName(formData.categoryId)}
               </h4>
               <div className="grid grid-cols-2 gap-3">
-                {subjects.slice(0, 4).map((subject) => (
+                {subjectsData.slice(0, 4).map((subject: any) => (
                   <div key={subject.id} className="flex items-center justify-between bg-card p-3 rounded-lg">
                     <span className="text-sm">{subject.name}</span>
                     <span className="text-sm font-medium text-primary">25 questions</span>
@@ -303,6 +347,7 @@ export const Tests = () => {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="input-field min-h-[80px] resize-none"
               placeholder="Enter test description"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -315,6 +360,7 @@ export const Tests = () => {
                 onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
                 className="input-field"
                 min={1}
+                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -325,6 +371,7 @@ export const Tests = () => {
                 onChange={(e) => setFormData({ ...formData, totalQuestions: parseInt(e.target.value) })}
                 className="input-field"
                 min={1}
+                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -336,6 +383,7 @@ export const Tests = () => {
                 onChange={(e) => setFormData({ ...formData, positiveMarks: parseFloat(e.target.value) })}
                 className="input-field"
                 min={0}
+                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -347,6 +395,7 @@ export const Tests = () => {
                 onChange={(e) => setFormData({ ...formData, negativeMarks: parseFloat(e.target.value) })}
                 className="input-field"
                 min={0}
+                disabled={isSubmitting}
               />
             </div>
           </div>
@@ -362,6 +411,7 @@ export const Tests = () => {
                     checked={formData.type === 'Free'}
                     onChange={() => setFormData({ ...formData, type: 'Free' })}
                     className="w-4 h-4 text-primary"
+                    disabled={isSubmitting}
                   />
                   <span>Free</span>
                 </label>
@@ -372,6 +422,7 @@ export const Tests = () => {
                     checked={formData.type === 'Paid'}
                     onChange={() => setFormData({ ...formData, type: 'Paid' })}
                     className="w-4 h-4 text-primary"
+                    disabled={isSubmitting}
                   />
                   <span>Paid</span>
                 </label>
@@ -385,6 +436,7 @@ export const Tests = () => {
                 onChange={(e) => setFormData({ ...formData, testNumber: parseInt(e.target.value) })}
                 className="input-field"
                 min={1}
+                disabled={isSubmitting}
               />
             </div>
           </div>
@@ -398,10 +450,20 @@ export const Tests = () => {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 btn-outline">
+            <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="flex-1 btn-outline"
+                disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="flex-1 btn-primary">
+            <button 
+                type="submit" 
+                className="flex-1 btn-primary flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingTest ? 'Update' : 'Create'} Test
             </button>
           </div>

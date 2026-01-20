@@ -1,13 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { DataTable } from '@/components/common/DataTable';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
-import { Plus, Edit, Trash2, Eye, BookOpen, Link } from 'lucide-react';
-import { subjects as initialSubjects, categories } from '@/data/mockData';
+import { Plus, Edit, Trash2, Eye, Link, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Hooks
+import { 
+  useSubjects, 
+  useCategories 
+} from '@/hooks/useAdminData';
+import { 
+  useCreateSubject, 
+  useUpdateSubject, 
+  useDeleteSubject 
+} from '@/hooks/useAdminMutations';
+
+// Types
 interface Subject {
   id: string;
   name: string;
@@ -19,19 +30,46 @@ interface Subject {
 }
 
 export const Subjects = () => {
-  const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
+  // 1. Fetch Data
+  const { data: subjectsData, isLoading: isSubjectsLoading } = useSubjects();
+  const { data: categoriesData = [] } = useCategories();
+
+  // 2. Mutation Hooks
+  const createMutation = useCreateSubject();
+  const updateMutation = useUpdateSubject();
+  const deleteMutation = useDeleteSubject();
+
+  // 3. Local State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [linkingSubject, setLinkingSubject] = useState<Subject | null>(null);
+  
+  // Filter state
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  
+  // Form State
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     isActive: true,
   });
+
+  // Link Modal State
   const [categoryLinks, setCategoryLinks] = useState<Record<string, { selected: boolean; questions: number }>>({});
 
+  // 4. Derived Data
+  const subjects = (subjectsData as Subject[]) || [];
+  
+  // Filter logic: In a real app, this might happen on the backend, 
+  // but for now we filter the fetched list client-side if the API doesn't support ?categoryId=...
+  const filteredSubjects = selectedCategory
+    ? subjects // Placeholder: Add actual filter logic here if your subject object has a 'categoryIds' array
+    : subjects;
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  // Handlers
   const handleOpenModal = (subject?: Subject) => {
     if (subject) {
       setEditingSubject(subject);
@@ -58,15 +96,19 @@ export const Subjects = () => {
 
   const handleOpenLinkModal = (subject: Subject) => {
     setLinkingSubject(subject);
+    
+    // Initialize links state
     const links: Record<string, { selected: boolean; questions: number }> = {};
-    categories.forEach((cat) => {
-      links[cat.id] = { selected: false, questions: 25 };
+    categoriesData.forEach((cat: any) => {
+      // In a real app, you'd pre-fill this with existing links from the API
+      links[cat.id] = { selected: false, questions: 25 }; 
     });
     setCategoryLinks(links);
+    
     setIsLinkModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -74,62 +116,59 @@ export const Subjects = () => {
       return;
     }
 
-    if (editingSubject) {
-      setSubjects(subjects.map((sub) =>
-        sub.id === editingSubject.id
-          ? { ...sub, ...formData }
-          : sub
-      ));
-      toast.success('Subject updated successfully');
-    } else {
-      const newSubject: Subject = {
-        id: String(Date.now()),
-        name: formData.name,
-        description: formData.description,
-        image: null,
-        categoriesUsed: 0,
-        totalQuestions: 0,
-        isActive: formData.isActive,
-      };
-      setSubjects([...subjects, newSubject]);
-      toast.success('Subject created successfully');
-      handleOpenLinkModal(newSubject);
+    try {
+      if (editingSubject) {
+        await updateMutation.mutateAsync({ 
+          id: editingSubject.id, 
+          data: formData 
+        });
+        handleCloseModal();
+      } else {
+        const newSubject = await createMutation.mutateAsync(formData);
+        handleCloseModal();
+        
+        // Optional: Open link modal immediately after creating
+        // You might need to fetch the full object or just use the response
+        if (newSubject) {
+           // We need to cast or ensure the response matches Subject type
+           // handleOpenLinkModal(newSubject); 
+           toast.success("Subject created. You can now link categories.");
+        }
+      }
+    } catch (error) {
+      console.error(error);
     }
-    
-    handleCloseModal();
   };
 
-  const handleSaveLinks = () => {
+  const handleSaveLinks = async () => {
+    if (!linkingSubject) return;
+
+    // This logic depends on your API. 
+    // Usually you'd have an endpoint like POST /subjects/:id/links
+    // For now, we'll just simulate success or update a field if your API supports it.
+    
     const linkedCount = Object.values(categoryLinks).filter((l) => l.selected).length;
-    if (linkingSubject) {
-      setSubjects(subjects.map((sub) =>
-        sub.id === linkingSubject.id
-          ? { ...sub, categoriesUsed: linkedCount }
-          : sub
-      ));
-    }
+    
+    // Simulating an API call to save links
+    // await api.post(`/subjects/${linkingSubject.id}/links`, { links: categoryLinks });
+    
     toast.success(`Subject linked to ${linkedCount} categories`);
     setIsLinkModalOpen(false);
     setLinkingSubject(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this subject?')) {
-      setSubjects(subjects.filter((sub) => sub.id !== id));
-      toast.success('Subject deleted successfully');
+      await deleteMutation.mutateAsync(id);
     }
   };
 
-  const handleToggleActive = (id: string, isActive: boolean) => {
-    setSubjects(subjects.map((sub) =>
-      sub.id === id ? { ...sub, isActive } : sub
-    ));
-    toast.success(`Subject ${isActive ? 'activated' : 'deactivated'}`);
+  const handleToggleActive = (id: string, currentStatus: boolean) => {
+    updateMutation.mutate({ 
+      id, 
+      data: { isActive: !currentStatus } 
+    });
   };
-
-  const filteredSubjects = selectedCategory
-    ? subjects
-    : subjects;
 
   const columns = [
     { key: 'name', label: 'Subject Name', sortable: true },
@@ -137,7 +176,7 @@ export const Subjects = () => {
       key: 'description', 
       label: 'Description',
       render: (item: Subject) => (
-        <span className="text-muted-foreground line-clamp-1 max-w-xs">
+        <span className="text-muted-foreground line-clamp-1 max-w-xs" title={item.description}>
           {item.description}
         </span>
       )
@@ -147,7 +186,7 @@ export const Subjects = () => {
       label: 'Used in Categories',
       sortable: true,
       render: (item: Subject) => (
-        <Badge variant="primary">{item.categoriesUsed} categories</Badge>
+        <Badge variant="primary">{item.categoriesUsed || 0} categories</Badge>
       )
     },
     { 
@@ -155,7 +194,7 @@ export const Subjects = () => {
       label: 'Total Questions',
       sortable: true,
       render: (item: Subject) => (
-        <span className="font-medium">{item.totalQuestions.toLocaleString()}</span>
+        <span className="font-medium">{(item.totalQuestions || 0).toLocaleString()}</span>
       )
     },
     { 
@@ -164,7 +203,7 @@ export const Subjects = () => {
       render: (item: Subject) => (
         <Toggle
           checked={item.isActive}
-          onChange={(checked) => handleToggleActive(item.id, checked)}
+          onChange={() => handleToggleActive(item.id, item.isActive)}
         />
       )
     },
@@ -195,10 +234,15 @@ export const Subjects = () => {
           </button>
           <button 
             onClick={() => handleDelete(item.id)}
-            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+            disabled={deleteMutation.isPending}
+            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
             title="Delete"
           >
-            <Trash2 className="w-4 h-4" />
+             {deleteMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+             ) : (
+                <Trash2 className="w-4 h-4" />
+             )}
           </button>
         </div>
       )
@@ -218,7 +262,7 @@ export const Subjects = () => {
           className="input-field w-full sm:w-64"
         >
           <option value="">All Categories</option>
-          {categories.map((cat) => (
+          {categoriesData.map((cat: any) => (
             <option key={cat.id} value={cat.id}>{cat.name}</option>
           ))}
         </select>
@@ -229,12 +273,18 @@ export const Subjects = () => {
       </div>
 
       {/* Subjects Table */}
-      <DataTable
-        columns={columns}
-        data={filteredSubjects}
-        searchPlaceholder="Search subjects..."
-        emptyMessage="No subjects found"
-      />
+      {isSubjectsLoading ? (
+         <div className="flex justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+         </div>
+      ) : (
+        <DataTable
+            columns={columns}
+            data={filteredSubjects}
+            searchPlaceholder="Search subjects..."
+            emptyMessage="No subjects found"
+        />
+      )}
 
       {/* Add/Edit Modal */}
       <Modal
@@ -253,6 +303,7 @@ export const Subjects = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="input-field"
               placeholder="Enter subject name"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -263,6 +314,7 @@ export const Subjects = () => {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="input-field min-h-[100px] resize-none"
               placeholder="Enter subject description"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -284,10 +336,20 @@ export const Subjects = () => {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <button type="button" onClick={handleCloseModal} className="flex-1 btn-outline">
+            <button 
+                type="button" 
+                onClick={handleCloseModal} 
+                className="flex-1 btn-outline"
+                disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="flex-1 btn-primary">
+            <button 
+                type="submit" 
+                className="flex-1 btn-primary flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingSubject ? 'Update' : 'Create'} Subject
             </button>
           </div>
@@ -307,7 +369,7 @@ export const Subjects = () => {
           </p>
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {categories.map((category) => (
+            {categoriesData.map((category: any) => (
               <div 
                 key={category.id}
                 className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors"

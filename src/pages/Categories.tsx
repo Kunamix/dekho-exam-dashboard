@@ -2,9 +2,16 @@ import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
-import { Plus, Search, Edit, Trash2, FolderOpen, BookOpen, ClipboardList } from 'lucide-react';
-import { categories as initialCategories } from '@/data/mockData';
+import { Plus, Search, Edit, Trash2, FolderOpen, BookOpen, ClipboardList, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Import our custom hooks
+import { useCategories } from '@/hooks/useAdminData';
+import { 
+  useCreateCategory, 
+  useUpdateCategory, 
+  useDeleteCategory 
+} from '@/hooks/useAdminMutations';
 
 interface Category {
   id: string;
@@ -18,7 +25,15 @@ interface Category {
 }
 
 export const Categories = () => {
-  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  // 1. Fetch Data
+  const { data: categoriesData, isLoading: isCategoriesLoading } = useCategories();
+  
+  // 2. Initialize Mutations
+  const createMutation = useCreateCategory();
+  const updateMutation = useUpdateCategory();
+  const deleteMutation = useDeleteCategory();
+
+  // 3. Local UI State
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -29,10 +44,16 @@ export const Categories = () => {
     isActive: true,
   });
 
-  const filteredCategories = categories.filter((cat) =>
+  // Safe access to data (default to empty array)
+  const categories = categoriesData || [];
+
+  const filteredCategories = categories.filter((cat: Category) =>
     cat.name.toLowerCase().includes(search.toLowerCase()) ||
     cat.description.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Check if any mutation is in progress
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   const handleOpenModal = (category?: Category) => {
     if (category) {
@@ -60,7 +81,7 @@ export const Categories = () => {
     setEditingCategory(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -68,43 +89,37 @@ export const Categories = () => {
       return;
     }
 
-    if (editingCategory) {
-      setCategories(categories.map((cat) =>
-        cat.id === editingCategory.id
-          ? { ...cat, ...formData }
-          : cat
-      ));
-      toast.success('Category updated successfully');
-    } else {
-      const newCategory: Category = {
-        id: String(Date.now()),
-        name: formData.name,
-        description: formData.description,
-        image: null,
-        subjectsCount: 0,
-        testsCount: 0,
-        isActive: formData.isActive,
-        displayOrder: formData.displayOrder,
-      };
-      setCategories([...categories, newCategory]);
-      toast.success('Category created successfully');
+    try {
+      if (editingCategory) {
+        // Call Update Hook
+        await updateMutation.mutateAsync({ 
+          id: editingCategory.id, 
+          data: formData 
+        });
+      } else {
+        // Call Create Hook
+        await createMutation.mutateAsync(formData);
+      }
+      // Only close modal on success (mutations throw error on fail)
+      handleCloseModal();
+    } catch (error) {
+      console.error("Failed to save category", error);
+      // Toast is already handled in the Mutation Hook onSuccess/onError
     }
-    
-    handleCloseModal();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this category?')) {
-      setCategories(categories.filter((cat) => cat.id !== id));
-      toast.success('Category deleted successfully');
+      await deleteMutation.mutateAsync(id);
     }
   };
 
-  const handleToggleActive = (id: string, isActive: boolean) => {
-    setCategories(categories.map((cat) =>
-      cat.id === id ? { ...cat, isActive } : cat
-    ));
-    toast.success(`Category ${isActive ? 'activated' : 'deactivated'}`);
+  const handleToggleActive = (id: string, currentStatus: boolean) => {
+    // Optimistically toggle or wait for server
+    updateMutation.mutate({ 
+      id, 
+      data: { isActive: !currentStatus } 
+    });
   };
 
   return (
@@ -130,77 +145,91 @@ export const Categories = () => {
         </button>
       </div>
 
-      {/* Categories Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCategories.map((category) => (
-          <div 
-            key={category.id} 
-            className="dashboard-card p-6 hover:shadow-medium transition-shadow group"
-          >
-            {/* Image Placeholder */}
-            <div className="w-full h-32 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg mb-4 flex items-center justify-center">
-              <FolderOpen className="w-12 h-12 text-primary/40" />
-            </div>
-
-            {/* Content */}
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="font-semibold text-lg">{category.name}</h3>
-              <Toggle
-                checked={category.isActive}
-                onChange={(checked) => handleToggleActive(category.id, checked)}
-              />
-            </div>
-
-            <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-              {category.description}
-            </p>
-
-            {/* Stats */}
-            <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1">
-                <BookOpen className="w-4 h-4" />
-                <span>{category.subjectsCount} subjects</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <ClipboardList className="w-4 h-4" />
-                <span>{category.testsCount} tests</span>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 pt-4 border-t border-border">
-              <button 
-                onClick={() => handleOpenModal(category)}
-                className="flex-1 btn-outline text-sm py-2"
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </button>
-              <button 
-                onClick={() => handleDelete(category.id)}
-                className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {filteredCategories.length === 0 && (
-        <div className="text-center py-16">
-          <FolderOpen className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No categories found</h3>
-          <p className="text-muted-foreground mb-6">
-            {search ? 'Try adjusting your search' : 'Get started by creating your first category'}
-          </p>
-          {!search && (
-            <button onClick={() => handleOpenModal()} className="btn-primary">
-              Create First Category
-            </button>
-          )}
+      {/* Loading State */}
+      {isCategoriesLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
+      ) : (
+        <>
+          {/* Categories Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCategories.map((category: Category) => (
+              <div 
+                key={category.id} 
+                className="dashboard-card p-6 hover:shadow-medium transition-shadow group"
+              >
+                {/* Image Placeholder */}
+                <div className="w-full h-32 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg mb-4 flex items-center justify-center">
+                  <FolderOpen className="w-12 h-12 text-primary/40" />
+                </div>
+
+                {/* Content */}
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="font-semibold text-lg">{category.name}</h3>
+                  <Toggle
+                    checked={category.isActive}
+                    onChange={() => handleToggleActive(category.id, category.isActive)}
+                  />
+                </div>
+
+                <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                  {category.description}
+                </p>
+
+                {/* Stats */}
+                <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <BookOpen className="w-4 h-4" />
+                    <span>{category.subjectsCount || 0} subjects</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <ClipboardList className="w-4 h-4" />
+                    <span>{category.testsCount || 0} tests</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-4 border-t border-border">
+                  <button 
+                    onClick={() => handleOpenModal(category)}
+                    className="flex-1 btn-outline text-sm py-2"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(category.id)}
+                    disabled={deleteMutation.isPending}
+                    className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
+                  >
+                    {deleteMutation.isPending ? (
+                         <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                        <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Empty State */}
+          {filteredCategories.length === 0 && (
+            <div className="text-center py-16">
+              <FolderOpen className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No categories found</h3>
+              <p className="text-muted-foreground mb-6">
+                {search ? 'Try adjusting your search' : 'Get started by creating your first category'}
+              </p>
+              {!search && (
+                <button onClick={() => handleOpenModal()} className="btn-primary">
+                  Create First Category
+                </button>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Add/Edit Modal */}
@@ -220,6 +249,7 @@ export const Categories = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="input-field"
               placeholder="Enter category name"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -230,6 +260,7 @@ export const Categories = () => {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="input-field min-h-[100px] resize-none"
               placeholder="Enter category description"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -253,6 +284,7 @@ export const Categories = () => {
               onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) })}
               className="input-field"
               min={1}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -265,10 +297,20 @@ export const Categories = () => {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <button type="button" onClick={handleCloseModal} className="flex-1 btn-outline">
+            <button 
+              type="button" 
+              onClick={handleCloseModal} 
+              className="flex-1 btn-outline"
+              disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="flex-1 btn-primary">
+            <button 
+              type="submit" 
+              className="flex-1 btn-primary flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingCategory ? 'Update' : 'Create'} Category
             </button>
           </div>

@@ -3,10 +3,21 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
-import { Plus, Edit, Trash2, Check, Crown, Sparkles } from 'lucide-react';
-import { subscriptionPlans as initialPlans, categories } from '@/data/mockData';
+import { Plus, Edit, Trash2, Check, Crown, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Hooks
+import { 
+  useSubscriptionPlans, 
+  useCategories 
+} from '@/hooks/useAdminData';
+import { 
+  useCreatePlan, 
+  useUpdatePlan, 
+  useDeletePlan 
+} from '@/hooks/useAdminMutations';
+
+// Types
 interface Plan {
   id: string;
   name: string;
@@ -20,7 +31,16 @@ interface Plan {
 }
 
 export const Subscriptions = () => {
-  const [plans, setPlans] = useState<Plan[]>(initialPlans as Plan[]);
+  // 1. Fetch Data
+  const { data: plansData, isLoading: isPlansLoading } = useSubscriptionPlans();
+  const { data: categoriesData = [] } = useCategories();
+
+  // 2. Mutations
+  const createMutation = useCreatePlan();
+  const updateMutation = useUpdatePlan();
+  const deleteMutation = useDeletePlan();
+
+  // 3. Local State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [activeTab, setActiveTab] = useState<'category' | 'all'>('category');
@@ -36,10 +56,28 @@ export const Subscriptions = () => {
     isActive: true,
   });
 
+  // 4. Derived Data
+  const plans = (plansData as Plan[]) || [];
+  
   const filteredPlans = plans.filter((plan) => 
     activeTab === 'category' ? plan.type === 'Category' : plan.type === 'All'
   );
 
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  // Helpers
+  const getCategoryName = (id: string | null) => {
+    if (!id) return 'All Categories';
+    return categoriesData.find((c: any) => c.id === id)?.name || 'Unknown';
+  };
+
+  const formatDuration = (days: number) => {
+    if (days >= 365) return `${Math.floor(days / 365)} Year${days >= 730 ? 's' : ''}`;
+    if (days >= 30) return `${Math.floor(days / 30)} Month${days >= 60 ? 's' : ''}`;
+    return `${days} Days`;
+  };
+
+  // Handlers
   const handleOpenModal = (plan?: Plan) => {
     if (plan) {
       setEditingPlan(plan);
@@ -69,7 +107,7 @@ export const Subscriptions = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim()) {
@@ -82,8 +120,7 @@ export const Subscriptions = () => {
       return;
     }
 
-    const planData: Plan = {
-      id: editingPlan?.id || String(Date.now()),
+    const payload = {
       name: formData.name,
       description: formData.description,
       price: formData.price,
@@ -94,24 +131,35 @@ export const Subscriptions = () => {
       isActive: formData.isActive,
     };
 
-    if (editingPlan) {
-      setPlans(plans.map((p) => p.id === editingPlan.id ? planData : p));
-      toast.success('Plan updated successfully');
-    } else {
-      setPlans([...plans, planData]);
-      toast.success('Plan created successfully');
+    try {
+      if (editingPlan) {
+        await updateMutation.mutateAsync({ 
+          id: editingPlan.id, 
+          data: payload 
+        });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error(error);
     }
-    
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this plan?')) {
-      setPlans(plans.filter((p) => p.id !== id));
-      toast.success('Plan deleted successfully');
+      await deleteMutation.mutateAsync(id);
     }
   };
 
+  const handleToggleActive = (id: string, currentStatus: boolean) => {
+    updateMutation.mutate({ 
+      id, 
+      data: { isActive: !currentStatus } 
+    });
+  };
+
+  // Feature Array Handlers
   const addFeature = () => {
     setFormData({ ...formData, features: [...formData.features, ''] });
   };
@@ -129,25 +177,14 @@ export const Subscriptions = () => {
     setFormData({ ...formData, features: newFeatures });
   };
 
-  const getCategoryName = (id: string | null) => {
-    if (!id) return 'All Categories';
-    return categories.find((c) => c.id === id)?.name || 'Unknown';
-  };
-
-  const formatDuration = (days: number) => {
-    if (days >= 365) return `${Math.floor(days / 365)} Year${days >= 730 ? 's' : ''}`;
-    if (days >= 30) return `${Math.floor(days / 30)} Month${days >= 60 ? 's' : ''}`;
-    return `${days} Days`;
-  };
-
   return (
     <DashboardLayout 
       title="Subscription Plans" 
       breadcrumbs={[{ label: 'Subscriptions' }]}
     >
-      {/* Tabs */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex bg-muted rounded-lg p-1">
+      {/* Tabs & Actions */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div className="flex bg-muted rounded-lg p-1 self-start">
           <button
             onClick={() => setActiveTab('category')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -176,78 +213,90 @@ export const Subscriptions = () => {
       </div>
 
       {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPlans.map((plan) => (
-          <div 
-            key={plan.id} 
-            className={`dashboard-card p-6 relative overflow-hidden ${
-              plan.type === 'All' ? 'border-2 border-primary/30' : ''
-            }`}
-          >
-            {plan.type === 'All' && (
-              <div className="absolute top-4 right-4">
-                <Crown className="w-6 h-6 text-primary" />
+      {isPlansLoading ? (
+         <div className="flex justify-center py-20">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredPlans.map((plan) => (
+            <div 
+              key={plan.id} 
+              className={`dashboard-card p-6 relative overflow-hidden ${
+                plan.type === 'All' ? 'border-2 border-primary/30' : ''
+              }`}
+            >
+              {plan.type === 'All' && (
+                <div className="absolute top-4 right-4">
+                  <Crown className="w-6 h-6 text-primary" />
+                </div>
+              )}
+
+              <div className="flex items-start justify-between mb-4">
+                <div className="pr-8">
+                  <h3 className="font-bold text-lg">{plan.name}</h3>
+                  <Badge variant={plan.type === 'All' ? 'primary' : 'info'} >
+                    {plan.type === 'All' ? 'All Categories' : getCategoryName(plan.categoryId)}
+                  </Badge>
+                </div>
+                <Toggle
+                  checked={plan.isActive}
+                  onChange={() => handleToggleActive(plan.id, plan.isActive)}
+                />
               </div>
-            )}
 
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="font-bold text-lg">{plan.name}</h3>
-                <Badge variant={plan.type === 'All' ? 'primary' : 'info'} >
-                  {plan.type === 'All' ? 'All Categories' : getCategoryName(plan.categoryId)}
-                </Badge>
+              <div className="mb-4">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold text-primary">₹{plan.price}</span>
+                  <span className="text-muted-foreground">/ {formatDuration(plan.durationDays)}</span>
+                </div>
               </div>
-              <Toggle
-                checked={plan.isActive}
-                onChange={(checked) => {
-                  setPlans(plans.map((p) =>
-                    p.id === plan.id ? { ...p, isActive: checked } : p
-                  ));
-                }}
-              />
-            </div>
 
-            <div className="mb-4">
-              <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold text-primary">₹{plan.price}</span>
-                <span className="text-muted-foreground">/ {formatDuration(plan.durationDays)}</span>
+              <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[40px]">
+                {plan.description}
+              </p>
+
+              <ul className="space-y-2 mb-6 min-h-[100px]">
+                {plan.features.slice(0, 4).map((feature, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm">
+                    <Check className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
+                    <span className="line-clamp-1">{feature}</span>
+                  </li>
+                ))}
+                {plan.features.length > 4 && (
+                  <li className="text-xs text-muted-foreground pl-6">
+                    + {plan.features.length - 4} more features
+                  </li>
+                )}
+              </ul>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-border">
+                <button 
+                  onClick={() => handleOpenModal(plan)}
+                  className="flex-1 btn-outline text-sm py-2"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit
+                </button>
+                <button 
+                  onClick={() => handleDelete(plan.id)}
+                  disabled={deleteMutation.isPending}
+                  className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
+                >
+                  {deleteMutation.isPending && editingPlan?.id === plan.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                      <Trash2 className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
-
-            <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-              {plan.description}
-            </p>
-
-            <ul className="space-y-2 mb-6">
-              {plan.features.map((feature, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <Check className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="flex items-center gap-2 pt-4 border-t border-border">
-              <button 
-                onClick={() => handleOpenModal(plan)}
-                className="flex-1 btn-outline text-sm py-2"
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </button>
-              <button 
-                onClick={() => handleDelete(plan.id)}
-                className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Empty State */}
-      {filteredPlans.length === 0 && (
+      {!isPlansLoading && filteredPlans.length === 0 && (
         <div className="text-center py-16">
           <Sparkles className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">No plans found</h3>
@@ -278,6 +327,7 @@ export const Subscriptions = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="input-field"
               placeholder="Enter plan name"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -288,6 +338,7 @@ export const Subscriptions = () => {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="input-field min-h-[80px] resize-none"
               placeholder="Enter plan description"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -302,6 +353,7 @@ export const Subscriptions = () => {
                 onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) })}
                 className="input-field"
                 min={0}
+                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -314,6 +366,7 @@ export const Subscriptions = () => {
                 onChange={(e) => setFormData({ ...formData, durationDays: parseInt(e.target.value) })}
                 className="input-field"
                 min={1}
+                disabled={isSubmitting}
               />
             </div>
           </div>
@@ -328,6 +381,7 @@ export const Subscriptions = () => {
                   checked={formData.type === 'Category'}
                   onChange={() => setFormData({ ...formData, type: 'Category' })}
                   className="w-4 h-4 text-primary"
+                  disabled={isSubmitting}
                 />
                 <span>Category-Specific</span>
               </label>
@@ -338,6 +392,7 @@ export const Subscriptions = () => {
                   checked={formData.type === 'All'}
                   onChange={() => setFormData({ ...formData, type: 'All', categoryId: '' })}
                   className="w-4 h-4 text-primary"
+                  disabled={isSubmitting}
                 />
                 <span>All Categories</span>
               </label>
@@ -353,9 +408,10 @@ export const Subscriptions = () => {
                 value={formData.categoryId}
                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                 className="input-field"
+                disabled={isSubmitting}
               >
                 <option value="">Select Category</option>
-                {categories.map((cat) => (
+                {categoriesData.map((cat: any) => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>
@@ -373,12 +429,14 @@ export const Subscriptions = () => {
                     onChange={(e) => updateFeature(index, e.target.value)}
                     className="input-field flex-1"
                     placeholder="Enter feature"
+                    disabled={isSubmitting}
                   />
                   {formData.features.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeFeature(index)}
                       className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                      disabled={isSubmitting}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -390,6 +448,7 @@ export const Subscriptions = () => {
               type="button"
               onClick={addFeature}
               className="btn-ghost text-sm mt-2"
+              disabled={isSubmitting}
             >
               <Plus className="w-4 h-4 mr-1" />
               Add Feature
@@ -405,10 +464,20 @@ export const Subscriptions = () => {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 btn-outline">
+            <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="flex-1 btn-outline"
+                disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="flex-1 btn-primary">
+            <button 
+                type="submit" 
+                className="flex-1 btn-primary flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+            >
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {editingPlan ? 'Update' : 'Create'} Plan
             </button>
           </div>
