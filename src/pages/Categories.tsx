@@ -27,6 +27,7 @@ interface Category {
 export const Categories = () => {
   // 1. Fetch Data
   const { data: categoriesData, isLoading: isCategoriesLoading } = useCategories();
+  // console.log(categoriesData.data.categories)
   
   // 2. Initialize Mutations
   const createMutation = useCreateCategory();
@@ -45,7 +46,7 @@ export const Categories = () => {
   });
 
   // Safe access to data (default to empty array)
-  const categories = categoriesData || [];
+  const categories = categoriesData?.data?.categories || [];
 
   const filteredCategories = categories.filter((cat: Category) =>
     cat.name.toLowerCase().includes(search.toLowerCase()) ||

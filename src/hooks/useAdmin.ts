@@ -5,7 +5,7 @@ export const useAdmin = () => {
   return useQuery({
     queryKey: ['admin-profile'],
     queryFn: async () => {
-      const {data} = await api.get('/auth/admin');
+      const {data} = await api.get('/admin-auth/me');
 
       if(data) {
         localStorage.setItem('user_info', JSON.stringify(data));

@@ -68,7 +68,7 @@ export const Tests = () => {
   });
 
   // 4. Derived Data
-  const tests = (testsData as Test[]) || [];
+  const tests = (testsData?.data?.tests as Test[]) || [];
 
   const filteredTests = tests.filter((test) => {
     if (selectedCategory && test.categoryId !== selectedCategory) return false;
@@ -250,7 +250,7 @@ export const Tests = () => {
             className="input-field w-48"
           >
             <option value="">All Categories</option>
-            {categoriesData.map((cat: any) => (
+            {categoriesData?.data?.category?.map((cat: any) => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
@@ -317,7 +317,7 @@ export const Tests = () => {
               disabled={isSubmitting}
             >
               <option value="">Select Category</option>
-              {categoriesData.map((cat: any) => (
+              {categoriesData?.data?.category?.map((cat: any) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>

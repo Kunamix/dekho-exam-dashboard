@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import {
   Mail,
   Lock,
@@ -13,25 +11,23 @@ import {
   BookOpen,
   Phone,
 } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import api from "@/lib/api";
+import { useAdminLogin } from "@/hooks/useAdminLogin"; // Import the new hook
 
 const Login = () => {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  // Use the custom hook
+  const { mutate: login, isPending, error: apiError } = useAdminLogin();
   
-  // State
+  // UI State
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{
+  const [validationErrors, setValidationErrors] = useState<{
     email?: string;
     password?: string;
     phone?: string;
-    general?: string;
   }>({});
   const [shake, setShake] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
@@ -50,36 +46,17 @@ const Login = () => {
     return /^\d{10}$/.test(phone);
   };
 
-  // Login Mutation
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: any) => {
-      const response = await api.post("/auth/admin-login", credentials);
-      return response.data;
-    },
-    onSuccess: (data) => {
-      if (loginMethod === "phone") {
-        toast.success("OTP sent to your phone!");
-        navigate("/otp-verification", { state: { phoneNumber } });
-      } else {
-        toast.success("Login successful!");
-        localStorage.setItem("user_info", "true");
-        queryClient.invalidateQueries({ queryKey: ["auth-user"] });
-        navigate("/dashboard");
-      }
-    },
-    onError: (error: any) => {
-      const message =
-        error.response?.data?.message || "Login failed. Please try again.";
-      setErrors({ general: message });
+  // Trigger shake animation on error
+  useEffect(() => {
+    if (apiError) {
       setShake(true);
-      setTimeout(() => setShake(false), 500);
-      toast.error(message);
-    },
-  });
+      const timer = setTimeout(() => setShake(false), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [apiError]);
 
-  // Form Submission
   const validateForm = (): boolean => {
-    const newErrors: typeof errors = {};
+    const newErrors: typeof validationErrors = {};
 
     if (loginMethod === "email") {
       if (!email) newErrors.email = "Email is required";
@@ -95,11 +72,11 @@ const Login = () => {
         newErrors.phone = "Enter a valid 10-digit phone number";
     }
 
-    setErrors(newErrors);
+    setValidationErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -108,8 +85,12 @@ const Login = () => {
       return;
     }
 
-    const payload = { email, password, phoneNumber };
-    loginMutation.mutate(payload);
+    // Call the hook
+    if (loginMethod === "email") {
+      login({ email, password });
+    } else {
+      login({ phoneNumber });
+    }
   };
 
   return (
@@ -147,9 +128,10 @@ const Login = () => {
           {/* Toggle Switch */}
           <div className="flex p-1 bg-muted/50 rounded-lg border border-border/50">
             <button
+              type="button"
               onClick={() => {
                 setLoginMethod("email");
-                setErrors({});
+                setValidationErrors({});
               }}
               className={cn(
                 "flex-1 py-2.5 text-sm font-medium rounded-md transition-all duration-200",
@@ -161,9 +143,10 @@ const Login = () => {
               Email Login
             </button>
             <button
+              type="button"
               onClick={() => {
                 setLoginMethod("phone");
-                setErrors({});
+                setValidationErrors({});
               }}
               className={cn(
                 "flex-1 py-2.5 text-sm font-medium rounded-md transition-all duration-200",
@@ -176,12 +159,12 @@ const Login = () => {
             </button>
           </div>
 
-          {/* General Error Alert */}
-          {errors.general && (
+          {/* General Error Alert (From API) */}
+          {apiError && (
             <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
               <p className="text-sm text-destructive font-medium">
-                {errors.general}
+                {(apiError as any)?.response?.data?.message || "Something went wrong"}
               </p>
             </div>
           )}
@@ -201,7 +184,7 @@ const Login = () => {
                     <Mail
                       className={cn(
                         "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors",
-                        errors.email ? "text-destructive" : "text-muted-foreground"
+                        validationErrors.email ? "text-destructive" : "text-muted-foreground"
                       )}
                     />
                     <input
@@ -210,16 +193,17 @@ const Login = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="admin@dekhoexam.com"
+                      disabled={isPending}
                       className={cn(
                         "flex h-12 w-full rounded-lg border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
-                        errors.email ? "border-destructive focus-visible:ring-destructive" : "border-input"
+                        validationErrors.email ? "border-destructive focus-visible:ring-destructive" : "border-input"
                       )}
                     />
                   </div>
-                  {errors.email && (
+                  {validationErrors.email && (
                     <p className="text-xs text-destructive flex items-center gap-1 font-medium">
                       <AlertCircle className="h-3 w-3" />
-                      {errors.email}
+                      {validationErrors.email}
                     </p>
                   )}
                 </div>
@@ -235,7 +219,7 @@ const Login = () => {
                     <Lock
                       className={cn(
                         "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors",
-                        errors.password ? "text-destructive" : "text-muted-foreground"
+                        validationErrors.password ? "text-destructive" : "text-muted-foreground"
                       )}
                     />
                     <input
@@ -244,13 +228,15 @@ const Login = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
+                      disabled={isPending}
                       className={cn(
                         "flex h-12 w-full rounded-lg border bg-background px-10 pr-12 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all",
-                        errors.password ? "border-destructive focus-visible:ring-destructive" : "border-input"
+                        validationErrors.password ? "border-destructive focus-visible:ring-destructive" : "border-input"
                       )}
                     />
                     <button
                       type="button"
+                      disabled={isPending}
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
                     >
@@ -261,10 +247,10 @@ const Login = () => {
                       )}
                     </button>
                   </div>
-                  {errors.password && (
+                  {validationErrors.password && (
                     <p className="text-xs text-destructive flex items-center gap-1 font-medium">
                       <AlertCircle className="h-3 w-3" />
-                      {errors.password}
+                      {validationErrors.password}
                     </p>
                   )}
                 </div>
@@ -281,7 +267,7 @@ const Login = () => {
                   <Phone
                     className={cn(
                       "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors",
-                      errors.phone ? "text-destructive" : "text-muted-foreground"
+                      validationErrors.phone ? "text-destructive" : "text-muted-foreground"
                     )}
                   />
                   <input
@@ -289,20 +275,21 @@ const Login = () => {
                     type="tel"
                     maxLength={10}
                     value={phoneNumber}
+                    disabled={isPending}
                     onChange={(e) =>
                       setPhoneNumber(e.target.value.replace(/\D/g, ""))
                     }
                     placeholder="Enter 10-digit number"
                     className={cn(
                       "flex h-12 w-full rounded-lg border bg-background px-10 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-all",
-                      errors.phone ? "border-destructive focus-visible:ring-destructive" : "border-input"
+                      validationErrors.phone ? "border-destructive focus-visible:ring-destructive" : "border-input"
                     )}
                   />
                 </div>
-                {errors.phone && (
+                {validationErrors.phone && (
                   <p className="text-xs text-destructive flex items-center gap-1 font-medium">
                     <AlertCircle className="h-3 w-3" />
-                    {errors.phone}
+                    {validationErrors.phone}
                   </p>
                 )}
               </div>
@@ -310,10 +297,10 @@ const Login = () => {
 
             <button
               type="submit"
-              disabled={loginMutation.isPending}
+              disabled={isPending}
               className="w-full h-12 rounded-lg font-semibold text-primary-foreground bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
             >
-              {loginMutation.isPending ? (
+              {isPending ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
                   <span>Processing...</span>
@@ -348,7 +335,7 @@ const Login = () => {
           }}
         />
         
-        {/* Floating Circles for ambiance */}
+        {/* Floating Circles */}
         <div className="absolute top-20 left-20 w-32 h-32 bg-white/5 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-20 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" />
 
@@ -358,7 +345,7 @@ const Login = () => {
             isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
           )}
         >
-          {/* Right Logo Container - Fixed Layout */}
+          {/* Right Logo Container */}
           <div className="mb-10 p-6 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl">
             <img 
               src="/images/logo.png" 

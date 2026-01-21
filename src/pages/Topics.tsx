@@ -66,12 +66,12 @@ export const Topics = () => {
   // 5. Grouping Logic
   // We want to show Subject Cards, and list topics inside them.
   const displayedSubjects = selectedSubject
-    ? subjectsData.filter((s: any) => s.id === selectedSubject)
+    ? subjectsData?.data?.subjects?.filter((s: any) => s.id === selectedSubject)
     : subjectsData;
 
-  const groupedTopics = displayedSubjects.map((subject: any) => ({
+  const groupedTopics = displayedSubjects?.data?.subjects?.map((subject: any) => ({
     ...subject,
-    topics: topicsData.filter((t: Topic) => t.subjectId === subject.id),
+    topics: topicsData?.data?.topics?.filter((t: Topic) => t.subjectId === subject.id),
   }));
 
   // Handlers
@@ -164,7 +164,7 @@ export const Topics = () => {
           className="input-field w-full sm:w-64"
         >
           <option value="">All Subjects</option>
-          {subjectsData.map((sub: any) => (
+          {subjectsData?.data?.subjects?.map((sub: any) => (
             <option key={sub.id} value={sub.id}>{sub.name}</option>
           ))}
         </select>
@@ -197,22 +197,22 @@ export const Topics = () => {
                   <div className="text-left">
                     <h3 className="font-semibold">{subject.name}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {subject.topics.length} topics
+                      {subject?.topics?.length || 0} topics
                     </p>
                   </div>
                 </div>
-                <Badge variant="primary">{subject.topics.length}</Badge>
+                <Badge variant="primary">{subject?.topics?.length}</Badge>
               </button>
 
               {/* Topics List */}
               {expandedSubjects.has(subject.id) && (
                 <div className="border-t border-border">
-                  {subject.topics.length === 0 ? (
+                  {subject?.topics?.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">
                       No topics found for this subject
                     </div>
                   ) : (
-                    subject.topics.map((topic: Topic) => (
+                    subject?.topics?.map((topic: Topic) => (
                       <div
                         key={topic.id}
                         className="flex items-center justify-between p-4 border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
@@ -298,7 +298,7 @@ export const Topics = () => {
               disabled={isSubmitting}
             >
               <option value="">Select Subject</option>
-              {subjectsData.map((sub: any) => (
+              {subjectsData?.data?.subjects?.map((sub: any) => (
                 <option key={sub.id} value={sub.id}>{sub.name}</option>
               ))}
             </select>

@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { 
-  Users, FolderOpen, HelpCircle, CreditCard, RefreshCw, Loader2 
+  Users, FolderOpen, HelpCircle, CreditCard, RefreshCw, Loader2, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 
 // Components
@@ -18,30 +18,30 @@ import { Badge } from '@/components/common/Badge';
 import { 
   useDashboardStats, 
   useUserAnalytics, 
-  useTestAnalytics, 
-  useRevenueAnalytics 
-} from '@/hooks/useAdminData';
+  useRevenueAnalytics,
+  useTestAnalytics
+} from '@/hooks/useDashboard';
 
 export const Dashboard = () => {
   const queryClient = useQueryClient();
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // 1. Fetch Data using Hooks
+  // 1. Fetch Data using the new Hooks
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: userAnalytics, isLoading: usersLoading } = useUserAnalytics();
-  const { data: testAnalytics, isLoading: testsLoading } = useTestAnalytics();
   const { data: revenueAnalytics, isLoading: revenueLoading } = useRevenueAnalytics();
+  const { data: testAnalytics, isLoading: testsLoading } = useTestAnalytics();
 
-  // Combine loading states
-  const isLoading = statsLoading || usersLoading || testsLoading || revenueLoading;
+  const isLoading = statsLoading || usersLoading || revenueLoading || testsLoading;
 
   // 2. Refresh Handler
   const handleRefresh = async () => {
-    // Invalidate all dashboard related queries to trigger a refetch
-    await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-    await queryClient.invalidateQueries({ queryKey: ['analytics-users'] });
-    await queryClient.invalidateQueries({ queryKey: ['analytics-tests'] });
-    await queryClient.invalidateQueries({ queryKey: ['analytics-revenue'] });
+    // Invalidate all dashboard specific keys to force a refetch
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-charts'] }),
+      queryClient.invalidateQueries({ queryKey: ['recent-users-widget'] })
+    ]);
     setLastUpdated(new Date());
   };
 
@@ -58,11 +58,37 @@ export const Dashboard = () => {
     return new Intl.NumberFormat('en-IN').format(value);
   };
 
-  // 4. Table Configuration
+  // 4. Safe Data Defaults (Matches your Backend Response Structure)
+  const safeStats = stats || { 
+    totalUsers: 0, 
+    userGrowth: 0, 
+    totalCategories: 0, 
+    totalQuestions: 0, 
+    activeSubscriptions: 0, 
+    totalRevenue: 0,
+    revenueGrowth: 0
+  };
+
+  // Data from useUserAnalytics (mapped from getDashboardCharts + getRecentUsersWidget)
+  const registrationData = userAnalytics?.registrationData || [];
+  const recentUsersList = userAnalytics?.recentUsers || [];
+
+  // Data from useRevenueAnalytics (mapped from getDashboardCharts)
+  const monthlyRevenueData = revenueAnalytics?.monthlyRevenue || [];
+  const subscriptionDistribution = revenueAnalytics?.distribution || [];
+
+  // Data from useTestAnalytics (mapped from getDashboardCharts)
+  const attemptsData = testAnalytics?.testAttemptsByCategory || [];
+
+  // 5. Table Columns
   const recentUsersColumns = [
     { key: 'name', label: 'User Name', sortable: true },
     { key: 'phone', label: 'Phone Number' },
-    { key: 'registeredOn', label: 'Registered On', sortable: true },
+    { 
+      key: 'registeredOn', 
+      label: 'Registered On', 
+      render: (item: any) => new Date(item.registeredOn).toLocaleDateString('en-IN')
+    },
     { 
       key: 'status', 
       label: 'Status',
@@ -74,21 +100,7 @@ export const Dashboard = () => {
     },
   ];
 
-  const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)'];
-
-  // 5. Safe Data Access (Defaults)
-  // These ensure the app doesn't crash if API returns null
-  const safeStats = stats || { 
-    totalUsers: 0, userGrowth: 0, totalCategories: 0, 
-    totalQuestions: 0, activeSubscriptions: 0, 
-    revenueGrowth: 0, totalRevenue: 0 
-  };
-  
-  const registrationData = userAnalytics?.registrationData || [];
-  const recentUsersList = userAnalytics?.recentUsers || [];
-  const attemptsData = testAnalytics?.testAttemptsByCategory || [];
-  // Assuming revenue analytics API returns a 'distribution' field
-  const subscriptionData = revenueAnalytics?.distribution || []; 
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', '#FFBB28', '#FF8042'];
 
   if (isLoading) {
     return (
@@ -105,11 +117,11 @@ export const Dashboard = () => {
 
   return (
     <DashboardLayout title="Dashboard">
-      {/* Last Updated Header */}
+      {/* Header & Refresh */}
       <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-muted-foreground">
-          Last updated: {lastUpdated.toLocaleTimeString()}
-        </p>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
+        </div>
         <button 
           onClick={handleRefresh}
           className="btn-ghost flex items-center gap-2 text-sm hover:bg-muted p-2 rounded-md transition-colors"
@@ -119,7 +131,7 @@ export const Dashboard = () => {
         </button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
           title="Total Users"
@@ -141,95 +153,30 @@ export const Dashboard = () => {
           variant="warning"
         />
         <StatsCard
-          title="Active Subscriptions"
-          value={formatNumber(safeStats.activeSubscriptions)}
+          title="Total Revenue"
+          value={formatCurrency(safeStats.totalRevenue)}
           icon={CreditCard}
           change={safeStats.revenueGrowth}
           variant="primary"
         />
       </div>
 
-      {/* Charts Row 1 */}
+      {/* Charts Row 1: Growth & Engagement */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* User Registrations Chart */}
         <div className="dashboard-card p-6">
           <h3 className="section-title mb-4">User Registrations (Last 15 Days)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={registrationData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis 
-                dataKey="date" 
-                tick={{ fontSize: 12 }}
-                tickFormatter={(value) => new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                stroke="hsl(var(--muted-foreground))"
-              />
-              <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))', 
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px'
-                }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="users" 
-                stroke="hsl(var(--primary))" 
-                strokeWidth={2}
-                dot={{ fill: 'hsl(var(--primary))' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Test Attempts by Category */}
-        <div className="dashboard-card p-6">
-          <h3 className="section-title mb-4">Test Attempts by Category</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={attemptsData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis 
-                dataKey="category" 
-                type="category" 
-                tick={{ fontSize: 11 }} 
-                width={100}
-                stroke="hsl(var(--muted-foreground))"
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))', 
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px'
-                }}
-              />
-              <Bar dataKey="attempts" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Subscription Distribution */}
-        <div className="dashboard-card p-6">
-          <h3 className="section-title mb-4">Subscription Distribution</h3>
-          {subscriptionData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={subscriptionData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {subscriptionData.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={registrationData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis 
+                  dataKey="date" 
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                 <Tooltip 
                   contentStyle={{ 
                     backgroundColor: 'hsl(var(--card))', 
@@ -237,57 +184,144 @@ export const Dashboard = () => {
                     borderRadius: '8px'
                   }}
                 />
-                <Legend />
-              </PieChart>
+                <Line 
+                  type="monotone" 
+                  dataKey="users" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2}
+                  dot={{ fill: 'hsl(var(--primary))' }}
+                  name="New Users"
+                />
+              </LineChart>
             </ResponsiveContainer>
-          ) : (
-             <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                No subscription data available
-             </div>
-          )}
+          </div>
         </div>
 
-        {/* Quick Stats / Revenue Overview */}
+        {/* Test Attempts Bar Chart */}
+        <div className="dashboard-card p-6">
+          <h3 className="section-title mb-4">Top Categories by Attempts</h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={attemptsData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                <YAxis 
+                  dataKey="category" 
+                  type="category" 
+                  tick={{ fontSize: 11 }} 
+                  width={100}
+                  stroke="hsl(var(--muted-foreground))"
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                />
+                <Bar 
+                  dataKey="attempts" 
+                  fill="hsl(var(--primary))" 
+                  radius={[0, 4, 4, 0]} 
+                  name="Test Attempts"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row 2: Finance & Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        
+        {/* Revenue Trend (Bar) */}
         <div className="dashboard-card p-6 lg:col-span-2">
-          <h3 className="section-title mb-4">Revenue Overview</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-primary/5 rounded-xl p-4">
-              <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold text-primary mt-1">
-                {formatCurrency(safeStats.totalRevenue)}
-              </p>
-            </div>
-            <div className="bg-success/5 rounded-xl p-4">
-              <p className="text-sm text-muted-foreground">This Month</p>
-              <p className="text-2xl font-bold text-success mt-1">
-                {formatCurrency(revenueAnalytics?.currentMonthRevenue || 0)}
-              </p>
-            </div>
-            <div className="bg-warning/5 rounded-xl p-4">
-              <p className="text-sm text-muted-foreground">Avg. per User</p>
-              <p className="text-2xl font-bold text-warning mt-1">
-                {formatCurrency(
-                  safeStats.totalUsers > 0 
-                  ? Math.round(safeStats.totalRevenue / safeStats.totalUsers) 
-                  : 0
-                )}
-              </p>
-            </div>
-            <div className="bg-info/5 rounded-xl p-4">
-              <p className="text-sm text-muted-foreground">Conversion Rate</p>
-              <p className="text-2xl font-bold text-info mt-1">28.5%</p>
-            </div>
+          <h3 className="section-title mb-4">Monthly Revenue Trend</h3>
+          <div className="h-[300px] w-full">
+            {monthlyRevenueData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyRevenueData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fontSize: 12 }} 
+                    stroke="hsl(var(--muted-foreground))" 
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(val) => `₹${val/1000}k`}
+                    stroke="hsl(var(--muted-foreground))" 
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'hsl(var(--muted)/0.2)' }}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      borderRadius: '8px' 
+                    }}
+                    formatter={(val: number) => formatCurrency(val)}
+                  />
+                  <Bar 
+                    dataKey="revenue" 
+                    fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
+                    name="Revenue"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                No revenue data available
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Subscription Pie Chart */}
+        <div className="dashboard-card p-6">
+          <h3 className="section-title mb-4">Subscription Types</h3>
+          <div className="h-[300px] w-full">
+            {subscriptionDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={subscriptionDistribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {subscriptionDistribution.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill || COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      borderRadius: '8px' 
+                    }}
+                  />
+                  <Legend verticalAlign="bottom" height={36}/>
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                No active subscriptions
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Recent Users Table */}
       <div>
-        <h3 className="section-title mb-4">Recent User Registrations</h3>
+        <h3 className="section-title mb-4">Recent Registrations</h3>
         <DataTable
           columns={recentUsersColumns}
           data={recentUsersList}
-          searchPlaceholder="Search users..."
+          searchable={false}
+          emptyMessage="No recent users found"
         />
       </div>
     </DashboardLayout>

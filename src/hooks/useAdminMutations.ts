@@ -32,7 +32,7 @@ export const useUpdateCategory = () => {
   return useMutation({
     // Explicitly type the argument here:
     mutationFn: async ({ id, data }: { id: string; data: Partial<CategoryInput> }) => {
-      const res = await api.patch(`/categories/${id}`, data);
+      const res = await api.patch(`/category/update-category/${id}`, data);
       return res.data;
     },
     onSuccess: () => {
@@ -49,7 +49,7 @@ export const useCreateCategory = () => {
   return useMutation({
     // Explicitly type the argument here:
     mutationFn: async (data: CategoryInput) => {
-      const res = await api.post('/categories', data);
+      const res = await api.post('/category/create', data);
       return res.data;
     },
     onSuccess: () => {
@@ -58,11 +58,12 @@ export const useCreateCategory = () => {
     }
   });
 };
+
 export const useDeleteCategory = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id:string) => {
-      const res = await api.delete(`/categories/${id}`);
+      const res = await api.delete(`/category/delete-category/${id}`);
       return res.data;
     },
     onSuccess: () => {
@@ -78,7 +79,7 @@ export const useCreateSubject = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data:any) => {
-      const res = await api.post('/subjects', data);
+      const res = await api.post('/subject/create', data);
       return res.data;
     },
     onSuccess: () => {
@@ -92,7 +93,7 @@ export const useUpdateSubject = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await api.patch(`/subjects/${id}`, data);
+      const res = await api.patch(`/subject/update-subject/${id}`, data);
       return res.data;
     },
     onSuccess: () => {
@@ -106,7 +107,7 @@ export const useDeleteSubject = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id:string) => {
-      const res = await api.delete(`/subjects/${id}`);
+      const res = await api.delete(`/subject/delete-subject/${id}`);
       return res.data;
     },
     onSuccess: () => {
@@ -122,7 +123,7 @@ export const useCreateTopic = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data:any) => {
-      const res = await api.post('/topics', data);
+      const res = await api.post('/topic/create', data);
       return res.data;
     },
     onSuccess: () => {
@@ -165,15 +166,17 @@ export const useDeleteTopic = () => {
 export const useCreateQuestion = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data:any) => {
-      const res = await api.post('/questions', data);
+    mutationFn: async (data: any) => {
+      const res = await api.post('/question/create', data);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['questions'] });
-      // Also invalidate stats since totalQuestions changed
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }); 
-      toast.success("Question added to bank");
+      queryClient.invalidateQueries({ queryKey: ['question-stats'] });
+      toast.success("Question created successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to create question");
     }
   });
 };
@@ -182,12 +185,15 @@ export const useUpdateQuestion = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await api.patch(`/questions/${id}`, data);
+      const res = await api.put(`/question/questions/${id}`, data);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['questions'] });
-      toast.success("Question updated");
+      toast.success("Question updated successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to update question");
     }
   });
 };
@@ -195,13 +201,35 @@ export const useUpdateQuestion = () => {
 export const useDeleteQuestion = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id:string) => {
-      const res = await api.delete(`/questions/${id}`);
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/question/questions/${id}`);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['questions'] });
+      queryClient.invalidateQueries({ queryKey: ['question-stats'] });
       toast.success("Question deleted");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete question");
+    }
+  });
+};
+
+export const useBulkUploadQuestions = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (formData: FormData) => {
+      // Note: Don't set Content-Type manually, let the browser/axios set it for FormData
+      const res = await api.post('/question/questions/bulk-upload', formData); 
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['questions'] });
+      toast.success(data.message || "Bulk upload successful");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Bulk upload failed");
     }
   });
 };
@@ -256,7 +284,7 @@ export const useCreatePlan = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data:any) => {
-      const res = await api.post('/plans', data);
+      const res = await api.post('/subscription/create', data);
       return res.data;
     },
     onSuccess: () => {

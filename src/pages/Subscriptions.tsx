@@ -24,7 +24,7 @@ interface Plan {
   description: string;
   price: number;
   durationDays: number;
-  type: 'Category' | 'All';
+  type: 'CATEGORY_SPECIFIC' | 'ALL_CATEGORIES';
   categoryId: string | null;
   features: string[];
   isActive: boolean;
@@ -50,17 +50,17 @@ export const Subscriptions = () => {
     description: '',
     price: 499,
     durationDays: 180,
-    type: 'Category' as 'Category' | 'All',
+    type: 'CATEGORY_SPECIFIC' as 'CATEGORY_SPECIFIC' | 'ALL_CATEGORIES',
     categoryId: '',
     features: [''],
     isActive: true,
   });
 
   // 4. Derived Data
-  const plans = (plansData as Plan[]) || [];
+  const plans = (plansData?.data?.plans as Plan[]) || [];
   
   const filteredPlans = plans.filter((plan) => 
-    activeTab === 'category' ? plan.type === 'Category' : plan.type === 'All'
+    activeTab === 'category' ? plan.type === 'CATEGORY_SPECIFIC' : plan.type === 'ALL_CATEGORIES'
   );
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -68,7 +68,7 @@ export const Subscriptions = () => {
   // Helpers
   const getCategoryName = (id: string | null) => {
     if (!id) return 'All Categories';
-    return categoriesData.find((c: any) => c.id === id)?.name || 'Unknown';
+    return categoriesData?.data?.category?.find((c: any) => c.id === id)?.name || 'Unknown';
   };
 
   const formatDuration = (days: number) => {
@@ -98,7 +98,7 @@ export const Subscriptions = () => {
         description: '',
         price: 499,
         durationDays: 180,
-        type: 'Category',
+        type: 'CATEGORY_SPECIFIC',
         categoryId: '',
         features: [''],
         isActive: true,
@@ -115,7 +115,7 @@ export const Subscriptions = () => {
       return;
     }
 
-    if (formData.type === 'Category' && !formData.categoryId) {
+    if (formData.type === 'CATEGORY_SPECIFIC' && !formData.categoryId) {
       toast.error('Please select a category');
       return;
     }
@@ -126,7 +126,7 @@ export const Subscriptions = () => {
       price: formData.price,
       durationDays: formData.durationDays,
       type: formData.type,
-      categoryId: formData.type === 'Category' ? formData.categoryId : null,
+      categoryId: formData.type === 'CATEGORY_SPECIFIC' ? formData.categoryId : null,
       features: formData.features.filter((f) => f.trim()),
       isActive: formData.isActive,
     };
@@ -223,10 +223,10 @@ export const Subscriptions = () => {
             <div 
               key={plan.id} 
               className={`dashboard-card p-6 relative overflow-hidden ${
-                plan.type === 'All' ? 'border-2 border-primary/30' : ''
+                plan.type === 'ALL_CATEGORIES' ? 'border-2 border-primary/30' : ''
               }`}
             >
-              {plan.type === 'All' && (
+              {plan.type === 'ALL_CATEGORIES' && (
                 <div className="absolute top-4 right-4">
                   <Crown className="w-6 h-6 text-primary" />
                 </div>
@@ -235,8 +235,8 @@ export const Subscriptions = () => {
               <div className="flex items-start justify-between mb-4">
                 <div className="pr-8">
                   <h3 className="font-bold text-lg">{plan.name}</h3>
-                  <Badge variant={plan.type === 'All' ? 'primary' : 'info'} >
-                    {plan.type === 'All' ? 'All Categories' : getCategoryName(plan.categoryId)}
+                  <Badge variant={plan.type === 'ALL_CATEGORIES' ? 'primary' : 'info'} >
+                    {plan.type === 'ALL_CATEGORIES' ? 'All Categories' : getCategoryName(plan.categoryId)}
                   </Badge>
                 </div>
                 <Toggle
@@ -257,7 +257,7 @@ export const Subscriptions = () => {
               </p>
 
               <ul className="space-y-2 mb-6 min-h-[100px]">
-                {plan.features.slice(0, 4).map((feature, index) => (
+                {/* {plan.features.slice(0, 4).map((feature, index) => (
                   <li key={index} className="flex items-start gap-2 text-sm">
                     <Check className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
                     <span className="line-clamp-1">{feature}</span>
@@ -267,7 +267,7 @@ export const Subscriptions = () => {
                   <li className="text-xs text-muted-foreground pl-6">
                     + {plan.features.length - 4} more features
                   </li>
-                )}
+                )} */}
               </ul>
 
               <div className="flex items-center gap-2 pt-4 border-t border-border">
@@ -378,8 +378,8 @@ export const Subscriptions = () => {
                 <input
                   type="radio"
                   name="planType"
-                  checked={formData.type === 'Category'}
-                  onChange={() => setFormData({ ...formData, type: 'Category' })}
+                  checked={formData.type === 'CATEGORY_SPECIFIC'}
+                  onChange={() => setFormData({ ...formData, type: 'CATEGORY_SPECIFIC' })}
                   className="w-4 h-4 text-primary"
                   disabled={isSubmitting}
                 />
@@ -389,8 +389,8 @@ export const Subscriptions = () => {
                 <input
                   type="radio"
                   name="planType"
-                  checked={formData.type === 'All'}
-                  onChange={() => setFormData({ ...formData, type: 'All', categoryId: '' })}
+                  checked={formData.type === 'ALL_CATEGORIES'}
+                  onChange={() => setFormData({ ...formData, type: 'ALL_CATEGORIES', categoryId: '' })}
                   className="w-4 h-4 text-primary"
                   disabled={isSubmitting}
                 />
@@ -399,7 +399,7 @@ export const Subscriptions = () => {
             </div>
           </div>
 
-          {formData.type === 'Category' && (
+          {formData.type === 'CATEGORY_SPECIFIC' && (
             <div>
               <label className="block text-sm font-medium mb-1">
                 Category <span className="text-destructive">*</span>
@@ -411,7 +411,7 @@ export const Subscriptions = () => {
                 disabled={isSubmitting}
               >
                 <option value="">Select Category</option>
-                {categoriesData.map((cat: any) => (
+                {categoriesData?.data?.categories?.map((cat: any) => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </select>

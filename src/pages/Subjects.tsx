@@ -33,6 +33,7 @@ export const Subjects = () => {
   // 1. Fetch Data
   const { data: subjectsData, isLoading: isSubjectsLoading } = useSubjects();
   const { data: categoriesData = [] } = useCategories();
+ 
 
   // 2. Mutation Hooks
   const createMutation = useCreateSubject();
@@ -59,7 +60,7 @@ export const Subjects = () => {
   const [categoryLinks, setCategoryLinks] = useState<Record<string, { selected: boolean; questions: number }>>({});
 
   // 4. Derived Data
-  const subjects = (subjectsData as Subject[]) || [];
+  const subjects = (subjectsData) || [];
   
   // Filter logic: In a real app, this might happen on the backend, 
   // but for now we filter the fetched list client-side if the API doesn't support ?categoryId=...
@@ -99,7 +100,7 @@ export const Subjects = () => {
     
     // Initialize links state
     const links: Record<string, { selected: boolean; questions: number }> = {};
-    categoriesData.forEach((cat: any) => {
+    categoriesData?.data?.category?.forEach((cat: any) => {
       // In a real app, you'd pre-fill this with existing links from the API
       links[cat.id] = { selected: false, questions: 25 }; 
     });
@@ -262,7 +263,7 @@ export const Subjects = () => {
           className="input-field w-full sm:w-64"
         >
           <option value="">All Categories</option>
-          {categoriesData.map((cat: any) => (
+          {categoriesData?.data?.category?.map((cat: any) => (
             <option key={cat.id} value={cat.id}>{cat.name}</option>
           ))}
         </select>
@@ -280,7 +281,7 @@ export const Subjects = () => {
       ) : (
         <DataTable
             columns={columns}
-            data={filteredSubjects}
+            data={filteredSubjects.data.subjects}
             searchPlaceholder="Search subjects..."
             emptyMessage="No subjects found"
         />
@@ -369,7 +370,7 @@ export const Subjects = () => {
           </p>
 
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {categoriesData.map((category: any) => (
+            {categoriesData?.data?.category?.map((category: any) => (
               <div 
                 key={category.id}
                 className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/30 transition-colors"

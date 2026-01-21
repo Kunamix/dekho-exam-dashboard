@@ -48,7 +48,7 @@ export const Reports = () => {
   const difficultyDistribution = useMemo(() => {
     if (!questionsData) return [];
     
-    const counts = questionsData.reduce((acc: any, q: any) => {
+    const counts = questionsData?.data?.questions?.reduce((acc: any, q: any) => {
       acc[q.difficulty] = (acc[q.difficulty] || 0) + 1;
       return acc;
     }, {});
