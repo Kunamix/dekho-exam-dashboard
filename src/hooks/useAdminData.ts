@@ -1,8 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
-// --- Admin Profile Hook ---
-
 export const useCategories = () => {
   return useQuery({
     queryKey: ['categories'],
@@ -38,10 +36,6 @@ export const useTopics = (subjectId?: string) => {
   });
 };
 
-
-// ... existing hooks ...
-
-// Updated Question Hook to match your new Controller
 export const useQuestions = (filters?: { 
   subjectId?: string; 
   topicId?: string; 
@@ -86,8 +80,6 @@ export const useTests = () => {
     }
   });
 };
-
-// --- Business & User Hooks ---
 
 export const useSubscriptionPlans = (filters?: { 
   isActive?: boolean; 
@@ -161,15 +153,6 @@ export const useUserSubscriptions = (filters?: {
   });
 };
 
-export const useUsers = () => {
-  return useQuery({
-    queryKey: ['users'],
-    queryFn: async () => {
-      const { data } = await api.get('/user/get-all-users');
-      return data;
-    }
-  });
-};
 
 export const usePayments = () => {
   return useQuery({
@@ -181,7 +164,15 @@ export const usePayments = () => {
   });
 };
 
-// --- Analytics & Dashboard Hooks ---
+export const useUsers = () => {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const { data } = await api.get('/user/get-all-users');
+      return data;
+    }
+  });
+};
 
 export const useDashboardStats = () => {
   return useQuery({

@@ -36,6 +36,18 @@ interface LoginResponse {
   success: boolean;
 }
 
+interface UpdateProfilePayload {
+  name?: string;
+  email?: string | null;
+  phoneNumber?: string;
+}
+
+interface UpdatePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+
 export const useAdminLogin = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -93,3 +105,151 @@ export const useAdminLogin = () => {
     },
   });
 };
+
+export const useLogout = () => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post("/admin-auth/admin-logout", {});
+      return response.data;
+    },
+
+    onSuccess: (responseBody) => {
+      const { message } = responseBody;
+
+      // 🔐 Clear client-side auth data
+      localStorage.removeItem("user_info");
+    
+      sessionStorage.clear();
+
+      // 🧹 Clear React Query cache
+      queryClient.clear();
+
+      toast.success("Logged out", {
+        description: message || "Logout successful",
+      });
+
+      // 🚀 Redirect to login
+      navigate("/", { replace: true });
+    },
+
+    onError: (error: any) => {
+      // Even if backend fails, force logout on client
+      localStorage.removeItem("user_info");
+      localStorage.removeItem("accessToken");
+      sessionStorage.clear();
+      queryClient.clear();
+
+      const message =
+        error.response?.data?.message || "Session expired. Please login again.";
+
+      toast.error("Logged out", { description: message });
+
+      navigate("/", { replace: true });
+    },
+  });
+};
+
+export const useUpdateProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: UpdateProfilePayload) => {
+      const response = await api.put(
+        "/user/update-profile",
+        payload
+      );
+      return response.data;
+    },
+
+    onSuccess: (responseBody) => {
+      const { data, message } = responseBody;
+
+      // ✅ Update localStorage
+      localStorage.setItem("user_info", JSON.stringify(data));
+
+      // ♻️ Refresh auth/user cache if any
+      queryClient.invalidateQueries({ queryKey: ["auth-user"] });
+
+      toast.success("Profile updated", {
+        description: message || "Your profile has been updated",
+      });
+    },
+
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || "Profile update failed"
+      );
+    },
+  });
+};
+
+export const useUpdateProfilePic = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("avatar", file);
+
+      const response = await api.put(
+        "/admin/profile/avatar",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      return response.data;
+    },
+
+    onSuccess: (responseBody) => {
+      const { data, message } = responseBody;
+
+      // ✅ Sync updated user
+      localStorage.setItem("user_info", JSON.stringify(data));
+
+      queryClient.invalidateQueries({ queryKey: ["auth-user"] });
+
+      toast.success("Profile picture updated", {
+        description: message || "Avatar updated successfully",
+      });
+    },
+
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || "Profile picture upload failed"
+      );
+    },
+  });
+};
+
+export const useUpdatePassword = () => {
+  return useMutation({
+    mutationFn: async (payload: UpdatePasswordPayload) => {
+      const response = await api.put(
+        "/user/update-password",
+        payload
+      );
+      return response.data;
+    },
+
+    onSuccess: (responseBody) => {
+      toast.success("Password updated", {
+        description:
+          responseBody?.message || "Password changed successfully",
+      });
+    },
+
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || "Password update failed"
+      );
+    },
+  });
+};
+
