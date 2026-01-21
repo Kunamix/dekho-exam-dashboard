@@ -283,13 +283,18 @@ export const useDeleteTest = () => {
 export const useCreatePlan = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data:any) => {
+    mutationFn: async (data: any) => {
+      // Endpoint: /subscription/create
       const res = await api.post('/subscription/create', data);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      toast.success("Subscription plan created");
+      queryClient.invalidateQueries({ queryKey: ['subscription-stats'] });
+      toast.success("Subscription plan created successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to create plan");
     }
   });
 };
@@ -298,12 +303,16 @@ export const useUpdatePlan = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await api.patch(`/plans/${id}`, data);
+      // Endpoint: /subscription/update-subscription/:id
+      const res = await api.put(`/subscription/update-subscription/${id}`, data);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      toast.success("Plan updated");
+      toast.success("Plan updated successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to update plan");
     }
   });
 };
@@ -311,13 +320,74 @@ export const useUpdatePlan = () => {
 export const useDeletePlan = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id:string) => {
-      const res = await api.delete(`/plans/${id}`);
+    mutationFn: async (id: string) => {
+      // Endpoint: /subscription/delete-subscription/:id
+      const res = await api.delete(`/subscription/delete-subscription/${id}`);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      toast.success("Plan deleted");
+      queryClient.invalidateQueries({ queryKey: ['subscription-stats'] });
+      toast.success("Plan deleted/deactivated");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to delete plan");
+    }
+  });
+};
+
+// --- User Subscription Management Actions ---
+
+export const useCreateUserSubscription = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: any) => {
+      // Endpoint: /subscription/user-subscriptions (POST)
+      const res = await api.post('/subscription/user-subscriptions', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] });
+      toast.success("User subscription assigned successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to assign subscription");
+    }
+  });
+};
+
+export const useCancelUserSubscription = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      // Endpoint: /subscription/user-subscriptions/:id/cancel
+      const res = await api.post(`/subscription/user-subscriptions/${id}/cancel`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] });
+      toast.success("Subscription cancelled");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to cancel subscription");
+    }
+  });
+};
+
+export const useExtendUserSubscription = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, days }: { id: string; days: number }) => {
+      // Endpoint: /subscription/user-subscriptions/:id/extend
+      const res = await api.post(`/subscription/user-subscriptions/${id}/extend`, { additionalDays: days });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-subscriptions'] });
+      toast.success("Subscription extended");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Failed to extend subscription");
     }
   });
 };

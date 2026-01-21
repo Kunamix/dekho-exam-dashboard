@@ -3,13 +3,16 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
-import { Plus, Edit, Trash2, Check, Crown, Sparkles, Loader2 } from 'lucide-react';
+import { 
+  Plus, Edit, Trash2, Crown, Sparkles, Loader2, IndianRupee, Users 
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 // Hooks
 import { 
   useSubscriptionPlans, 
-  useCategories 
+  useCategories,
+  useSubscriptionStats
 } from '@/hooks/useAdminData';
 import { 
   useCreatePlan, 
@@ -17,33 +20,54 @@ import {
   useDeletePlan 
 } from '@/hooks/useAdminMutations';
 
-// Types
+// Types (Updated to match your backend)
 interface Plan {
   id: string;
   name: string;
   description: string;
-  price: number;
+  price: string | number;
   durationDays: number;
   type: 'CATEGORY_SPECIFIC' | 'ALL_CATEGORIES';
   categoryId: string | null;
-  features: string[];
   isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
+  category?: {
+    id: string;
+    name: string;
+  };
+  _count?: {
+    userSubscriptions: number;
+  };
 }
 
 export const Subscriptions = () => {
-  // 1. Fetch Data
-  const { data: plansData, isLoading: isPlansLoading } = useSubscriptionPlans();
-  const { data: categoriesData = [] } = useCategories();
+  // 1. Local State
+  const [activeTab, setActiveTab] = useState<'CATEGORY_SPECIFIC' | 'ALL_CATEGORIES'>('CATEGORY_SPECIFIC');
+  const [page, setPage] = useState(1);
+  const LIMIT = 9;
 
-  // 2. Mutations
+  // 2. Fetch Data
+  const { data: categoriesData = [] } = useCategories();
+  const { data: statsData } = useSubscriptionStats();
+  
+  const { data: plansResponse, isLoading: isPlansLoading } = useSubscriptionPlans({
+    type: activeTab,
+    page,
+    limit: LIMIT
+  });
+
+  const plans = (plansResponse?.plans as Plan[]) || [];
+  const pagination = plansResponse?.pagination || { total: 0, totalPages: 1 };
+
+  // 3. Mutations
   const createMutation = useCreatePlan();
   const updateMutation = useUpdatePlan();
   const deleteMutation = useDeletePlan();
 
-  // 3. Local State
+  // 4. UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [activeTab, setActiveTab] = useState<'category' | 'all'>('category');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -52,29 +76,25 @@ export const Subscriptions = () => {
     durationDays: 180,
     type: 'CATEGORY_SPECIFIC' as 'CATEGORY_SPECIFIC' | 'ALL_CATEGORIES',
     categoryId: '',
-    features: [''],
+    displayOrder: 0,
     isActive: true,
   });
-
-  // 4. Derived Data
-  const plans = (plansData?.data?.plans as Plan[]) || [];
-  
-  const filteredPlans = plans.filter((plan) => 
-    activeTab === 'category' ? plan.type === 'CATEGORY_SPECIFIC' : plan.type === 'ALL_CATEGORIES'
-  );
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   // Helpers
-  const getCategoryName = (id: string | null) => {
-    if (!id) return 'All Categories';
-    return categoriesData?.data?.category?.find((c: any) => c.id === id)?.name || 'Unknown';
-  };
-
   const formatDuration = (days: number) => {
     if (days >= 365) return `${Math.floor(days / 365)} Year${days >= 730 ? 's' : ''}`;
     if (days >= 30) return `${Math.floor(days / 30)} Month${days >= 60 ? 's' : ''}`;
     return `${days} Days`;
+  };
+
+  const formatPrice = (price: string | number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(Number(price));
   };
 
   // Handlers
@@ -83,12 +103,12 @@ export const Subscriptions = () => {
       setEditingPlan(plan);
       setFormData({
         name: plan.name,
-        description: plan.description,
-        price: plan.price,
+        description: plan.description || '',
+        price: Number(plan.price),
         durationDays: plan.durationDays,
         type: plan.type,
         categoryId: plan.categoryId || '',
-        features: plan.features.length > 0 ? plan.features : [''],
+        displayOrder: plan.displayOrder || 0,
         isActive: plan.isActive,
       });
     } else {
@@ -98,9 +118,9 @@ export const Subscriptions = () => {
         description: '',
         price: 499,
         durationDays: 180,
-        type: 'CATEGORY_SPECIFIC',
+        type: activeTab, // Default to current tab for better UX
         categoryId: '',
-        features: [''],
+        displayOrder: 0,
         isActive: true,
       });
     }
@@ -123,11 +143,12 @@ export const Subscriptions = () => {
     const payload = {
       name: formData.name,
       description: formData.description,
-      price: formData.price,
-      durationDays: formData.durationDays,
+      price: Number(formData.price),
+      durationDays: Number(formData.durationDays),
       type: formData.type,
-      categoryId: formData.type === 'CATEGORY_SPECIFIC' ? formData.categoryId : null,
-      features: formData.features.filter((f) => f.trim()),
+      // Backend controller validation: categoryId should not be sent for ALL_CATEGORIES
+      categoryId: formData.type === 'CATEGORY_SPECIFIC' ? formData.categoryId : undefined,
+      displayOrder: Number(formData.displayOrder),
       isActive: formData.isActive,
     };
 
@@ -147,7 +168,7 @@ export const Subscriptions = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this plan?')) {
+    if (confirm('Delete this plan? If it has active subscribers, it will be deactivated instead.')) {
       await deleteMutation.mutateAsync(id);
     }
   };
@@ -159,326 +180,337 @@ export const Subscriptions = () => {
     });
   };
 
-  // Feature Array Handlers
-  const addFeature = () => {
-    setFormData({ ...formData, features: [...formData.features, ''] });
-  };
-
-  const removeFeature = (index: number) => {
-    setFormData({
-      ...formData,
-      features: formData.features.filter((_, i) => i !== index),
-    });
-  };
-
-  const updateFeature = (index: number, value: string) => {
-    const newFeatures = [...formData.features];
-    newFeatures[index] = value;
-    setFormData({ ...formData, features: newFeatures });
-  };
-
   return (
     <DashboardLayout 
       title="Subscription Plans" 
       breadcrumbs={[{ label: 'Subscriptions' }]}
     >
-      {/* Tabs & Actions */}
+      {/* 1. Stats Cards */}
+      {statsData && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Total Plans</p>
+            <p className="text-3xl font-bold mt-2 text-foreground">{statsData.plans.total}</p>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Active Subscribers</p>
+            <p className="text-3xl font-bold mt-2 text-primary">{statsData.subscriptions.active}</p>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Total Revenue</p>
+            <p className="text-3xl font-bold mt-2 text-success">
+              {formatPrice(statsData.revenue.total)}
+            </p>
+          </div>
+          <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Expiring (7d)</p>
+            <p className="text-3xl font-bold mt-2 text-warning">{statsData.subscriptions.expiringSoon}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Controls & Tabs */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div className="flex bg-muted rounded-lg p-1 self-start">
+        <div className="flex p-1 bg-muted rounded-xl">
           <button
-            onClick={() => setActiveTab('category')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'category' 
-                ? 'bg-card shadow-sm text-foreground' 
+            onClick={() => { setActiveTab('CATEGORY_SPECIFIC'); setPage(1); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'CATEGORY_SPECIFIC' 
+                ? 'bg-background text-foreground shadow-sm' 
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Category-Specific Plans
+            Category Plans
           </button>
           <button
-            onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'all' 
-                ? 'bg-card shadow-sm text-foreground' 
+            onClick={() => { setActiveTab('ALL_CATEGORIES'); setPage(1); }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'ALL_CATEGORIES' 
+                ? 'bg-background text-foreground shadow-sm' 
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            All Categories Plans
+            All Access Plans
           </button>
         </div>
-        <button onClick={() => handleOpenModal()} className="btn-primary flex items-center gap-2">
+        <button onClick={() => handleOpenModal()} className="btn-primary flex items-center gap-2 rounded-xl px-4 py-2.5">
           <Plus className="w-4 h-4" />
-          Create New Plan
+          Create Plan
         </button>
       </div>
 
-      {/* Plans Grid */}
+      {/* 3. Plans Grid */}
       {isPlansLoading ? (
          <div className="flex justify-center py-20">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
          </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPlans.map((plan) => (
-            <div 
-              key={plan.id} 
-              className={`dashboard-card p-6 relative overflow-hidden ${
-                plan.type === 'ALL_CATEGORIES' ? 'border-2 border-primary/30' : ''
-              }`}
-            >
-              {plan.type === 'ALL_CATEGORIES' && (
-                <div className="absolute top-4 right-4">
-                  <Crown className="w-6 h-6 text-primary" />
-                </div>
-              )}
-
-              <div className="flex items-start justify-between mb-4">
-                <div className="pr-8">
-                  <h3 className="font-bold text-lg">{plan.name}</h3>
-                  <Badge variant={plan.type === 'ALL_CATEGORIES' ? 'primary' : 'info'} >
-                    {plan.type === 'ALL_CATEGORIES' ? 'All Categories' : getCategoryName(plan.categoryId)}
-                  </Badge>
-                </div>
-                <Toggle
-                  checked={plan.isActive}
-                  onChange={() => handleToggleActive(plan.id, plan.isActive)}
-                />
-              </div>
-
-              <div className="mb-4">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-primary">₹{plan.price}</span>
-                  <span className="text-muted-foreground">/ {formatDuration(plan.durationDays)}</span>
-                </div>
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-4 line-clamp-2 min-h-[40px]">
-                {plan.description}
-              </p>
-
-              <ul className="space-y-2 mb-6 min-h-[100px]">
-                {/* {plan.features.slice(0, 4).map((feature, index) => (
-                  <li key={index} className="flex items-start gap-2 text-sm">
-                    <Check className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
-                    <span className="line-clamp-1">{feature}</span>
-                  </li>
-                ))}
-                {plan.features.length > 4 && (
-                  <li className="text-xs text-muted-foreground pl-6">
-                    + {plan.features.length - 4} more features
-                  </li>
-                )} */}
-              </ul>
-
-              <div className="flex items-center gap-2 pt-4 border-t border-border">
-                <button 
-                  onClick={() => handleOpenModal(plan)}
-                  className="flex-1 btn-outline text-sm py-2"
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit
-                </button>
-                <button 
-                  onClick={() => handleDelete(plan.id)}
-                  disabled={deleteMutation.isPending}
-                  className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
-                >
-                  {deleteMutation.isPending && editingPlan?.id === plan.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                      <Trash2 className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!isPlansLoading && filteredPlans.length === 0 && (
-        <div className="text-center py-16">
-          <Sparkles className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No plans found</h3>
-          <p className="text-muted-foreground mb-6">
-            Create your first {activeTab === 'category' ? 'category-specific' : 'all categories'} plan
-          </p>
-          <button onClick={() => handleOpenModal()} className="btn-primary">
-            Create Plan
-          </button>
-        </div>
-      )}
-
-      {/* Add/Edit Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingPlan ? 'Edit Plan' : 'Create New Plan'}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Plan Name <span className="text-destructive">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="input-field"
-              placeholder="Enter plan name"
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="input-field min-h-[80px] resize-none"
-              placeholder="Enter plan description"
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Price (₹) <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) })}
-                className="input-field"
-                min={0}
-                disabled={isSubmitting}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Duration (Days) <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                value={formData.durationDays}
-                onChange={(e) => setFormData({ ...formData, durationDays: parseInt(e.target.value) })}
-                className="input-field"
-                min={1}
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Plan Type</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="planType"
-                  checked={formData.type === 'CATEGORY_SPECIFIC'}
-                  onChange={() => setFormData({ ...formData, type: 'CATEGORY_SPECIFIC' })}
-                  className="w-4 h-4 text-primary"
-                  disabled={isSubmitting}
-                />
-                <span>Category-Specific</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="planType"
-                  checked={formData.type === 'ALL_CATEGORIES'}
-                  onChange={() => setFormData({ ...formData, type: 'ALL_CATEGORIES', categoryId: '' })}
-                  className="w-4 h-4 text-primary"
-                  disabled={isSubmitting}
-                />
-                <span>All Categories</span>
-              </label>
-            </div>
-          </div>
-
-          {formData.type === 'CATEGORY_SPECIFIC' && (
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Category <span className="text-destructive">*</span>
-              </label>
-              <select
-                value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                className="input-field"
-                disabled={isSubmitting}
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {plans.map((plan: Plan) => (
+              <div 
+                key={plan.id} 
+                className={`group relative bg-card rounded-2xl border transition-all duration-300 hover:shadow-md flex flex-col
+                  ${plan.type === 'ALL_CATEGORIES' ? 'border-primary/40 shadow-primary/5' : 'border-border'}
+                  ${!plan.isActive ? 'opacity-60 grayscale-[0.5]' : ''}
+                `}
               >
-                <option value="">Select Category</option>
-                {categoriesData?.data?.categories?.map((cat: any) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
+                {/* Crown for Premium */}
+                {plan.type === 'ALL_CATEGORIES' && (
+                  <div className="absolute -top-3 -right-3 bg-primary text-primary-foreground p-2 rounded-full shadow-lg z-10">
+                    <Crown className="w-5 h-5" />
+                  </div>
+                )}
+
+                {/* Card Header */}
+                <div className="p-6 pb-4 border-b border-border/50">
+                  <div className="flex justify-between items-start mb-2">
+                    <Badge 
+                      variant={plan.type === 'ALL_CATEGORIES' ? 'primary' : 'outline'} 
+                      className="rounded-md uppercase text-[10px] tracking-wider font-bold"
+                    >
+                      {plan.type === 'ALL_CATEGORIES' ? 'All Access' : plan.category?.name}
+                    </Badge>
+                    <Toggle
+                      checked={plan.isActive}
+                      onChange={() => handleToggleActive(plan.id, plan.isActive)}
+                      size="sm"
+                    />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground mb-1">{plan.name}</h3>
+                  <div className="flex items-baseline gap-1 mt-3">
+                    <span className="text-3xl font-extrabold text-foreground">{formatPrice(plan.price)}</span>
+                    <span className="text-sm text-muted-foreground font-medium">/ {formatDuration(plan.durationDays)}</span>
+                  </div>
+                </div>
+
+                {/* Description Body */}
+                <div className="p-6 flex-1 bg-muted/5">
+                  <p className="text-sm text-muted-foreground line-clamp-4 whitespace-pre-wrap leading-relaxed">
+                    {plan.description || "No description provided."}
+                  </p>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-4 border-t border-border flex items-center justify-between gap-3 bg-card rounded-b-2xl">
+                  <div className="flex items-center text-xs text-muted-foreground font-medium px-2">
+                    <Users className="w-3.5 h-3.5 mr-1.5" />
+                    {plan._count?.userSubscriptions || 0} Subscribers
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleOpenModal(plan)}
+                      className="p-2 rounded-lg hover:bg-muted text-foreground/80 hover:text-primary transition-colors"
+                      title="Edit Plan"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(plan.id)}
+                      disabled={deleteMutation.isPending}
+                      className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      title="Delete Plan"
+                    >
+                      {deleteMutation.isPending && editingPlan?.id === plan.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Empty State */}
+          {!isPlansLoading && plans.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-border rounded-2xl bg-muted/5">
+              <div className="bg-muted rounded-full p-4 mb-4">
+                <Sparkles className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">No plans found</h3>
+              <p className="text-muted-foreground max-w-sm mt-1 mb-6">
+                Get started by creating your first {activeTab === 'CATEGORY_SPECIFIC' ? 'category' : 'bundle'} subscription plan.
+              </p>
+              <button onClick={() => handleOpenModal()} className="btn-primary rounded-xl">
+                <Plus className="w-4 h-4 mr-2" />
+                Create New Plan
+              </button>
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Features</label>
-            <div className="space-y-2">
-              {formData.features.map((feature, index) => (
-                <div key={index} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={feature}
-                    onChange={(e) => updateFeature(index, e.target.value)}
-                    className="input-field flex-1"
-                    placeholder="Enter feature"
-                    disabled={isSubmitting}
-                  />
-                  {formData.features.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeFeature(index)}
-                      className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-                      disabled={isSubmitting}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-8">
+              <button 
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="btn-outline text-sm py-2 px-4 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm font-medium">
+                Page {page} of {pagination.totalPages}
+              </span>
+              <button 
+                onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                disabled={page === pagination.totalPages}
+                className="btn-outline text-sm py-2 px-4 disabled:opacity-50"
+              >
+                Next
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={addFeature}
-              className="btn-ghost text-sm mt-2"
-              disabled={isSubmitting}
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add Feature
-            </button>
+          )}
+        </>
+      )}
+
+      {/* 4. Edit/Create Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingPlan ? 'Edit Subscription Plan' : 'Create Subscription Plan'}
+        size="lg"
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Name & Type */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="col-span-1 md:col-span-2">
+              <label className="block text-sm font-semibold mb-1.5">Plan Name</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="input-field"
+                placeholder="e.g. SSC CGL Pro Pack"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold mb-1.5">Price (₹)</label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="number"
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                  className="input-field pl-9"
+                  min={0}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1.5">Duration (Days)</label>
+              <input
+                type="number"
+                value={formData.durationDays}
+                onChange={(e) => setFormData({ ...formData, durationDays: Number(e.target.value) })}
+                className="input-field"
+                min={1}
+                required
+              />
+            </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Active Status</label>
-            <Toggle
-              checked={formData.isActive}
-              onChange={(checked) => setFormData({ ...formData, isActive: checked })}
+          {/* Config Section */}
+          <div className="p-4 bg-muted/30 border border-border rounded-xl space-y-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-semibold">Configuration</label>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 cursor-pointer bg-card px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
+                  <input
+                    type="radio"
+                    name="planType"
+                    checked={formData.type === 'CATEGORY_SPECIFIC'}
+                    onChange={() => setFormData({ ...formData, type: 'CATEGORY_SPECIFIC' })}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm">Specific Category</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer bg-card px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
+                  <input
+                    type="radio"
+                    name="planType"
+                    checked={formData.type === 'ALL_CATEGORIES'}
+                    onChange={() => setFormData({ ...formData, type: 'ALL_CATEGORIES', categoryId: '' })}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm">All Categories (Bundle)</span>
+                </label>
+              </div>
+            </div>
+
+            {formData.type === 'CATEGORY_SPECIFIC' && (
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Select Category</label>
+                <select
+                  value={formData.categoryId}
+                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  className="input-field bg-card"
+                  required
+                >
+                  <option value="">-- Choose Category --</option>
+                  {categoriesData?.data?.categories?.map((cat: any) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Description Text Area (No Features Array) */}
+          <div>
+            <label className="block text-sm font-semibold mb-1.5">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="input-field min-h-[120px] resize-none"
+              placeholder="Describe what's included in this plan..."
             />
           </div>
 
-          <div className="flex gap-3 pt-4">
+          {/* Footer Controls */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Display Order</label>
+              <input
+                type="number"
+                value={formData.displayOrder}
+                onChange={(e) => setFormData({ ...formData, displayOrder: Number(e.target.value) })}
+                className="input-field w-32"
+                min={0}
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border">
+                <span className="text-sm font-medium">Active Status</span>
+                <Toggle
+                  checked={formData.isActive}
+                  onChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-border">
             <button 
-                type="button" 
-                onClick={() => setIsModalOpen(false)} 
-                className="flex-1 btn-outline"
-                disabled={isSubmitting}
+              type="button" 
+              onClick={() => setIsModalOpen(false)} 
+              className="flex-1 btn-outline rounded-xl"
+              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button 
-                type="submit" 
-                className="flex-1 btn-primary flex items-center justify-center gap-2"
-                disabled={isSubmitting}
+              type="submit" 
+              className="flex-1 btn-primary rounded-xl flex items-center justify-center gap-2"
+              disabled={isSubmitting}
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editingPlan ? 'Update' : 'Create'} Plan
+              {editingPlan ? 'Save Changes' : 'Create Plan'}
             </button>
           </div>
         </form>

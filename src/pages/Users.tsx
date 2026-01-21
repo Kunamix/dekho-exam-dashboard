@@ -45,7 +45,7 @@ export const Users = () => {
   const { data: userDetails, isLoading: isDetailsLoading } = useUserDetails(selectedUserId);
 
   // 5. Derived Data & Filtering
-  const users = (usersData as User[]) || [];
+  const users = (usersData?.data?.users as User[]) || [];
 
   const filteredUsers = users.filter((user) => {
     if (roleFilter && user.role !== roleFilter) return false;
@@ -156,8 +156,8 @@ export const Users = () => {
   // Helper variables for Detail View
   // If `userDetails` (full data) is loading, fallback to the `selectedUser` from the list for basic info
   const displayUser = userDetails?.profile || users.find(u => u.id === selectedUserId);
-  const userSubscriptions = userDetails?.subscriptions || [];
-  const userAttempts = userDetails?.attempts || [];
+  const userSubscriptions = userDetails?._count?.subscriptions || [];
+  const userAttempts = userDetails?._count?.attempts || [];
 
   return (
     <DashboardLayout 
@@ -262,7 +262,7 @@ export const Users = () => {
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
                     <span className="text-2xl font-bold text-primary">
-                      {displayUser.name.charAt(0).toUpperCase()}
+                      {displayUser?.name?.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div>
@@ -289,11 +289,11 @@ export const Users = () => {
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Registered On</p>
-                    <p className="font-medium">{displayUser.registeredOn}</p>
+                    <p className="font-medium">{displayUser.createdAt}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Last Login</p>
-                    <p className="font-medium">{displayUser.lastLogin}</p>
+                    <p className="font-medium">{displayUser.lastLoginAt}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Free Tests Used</p>

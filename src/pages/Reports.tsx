@@ -1,27 +1,45 @@
-import { useMemo, useState } from 'react';
-import { 
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
-} from 'recharts';
-import { 
-  Award, Target, TrendingUp, Users, BarChart2, PieChart as PieChartIcon, 
-  Activity, Percent, Loader2 
-} from 'lucide-react';
+import { useMemo, useState } from "react";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+import {
+  Award,
+  Target,
+  TrendingUp,
+  Users,
+  BarChart2,
+  PieChart as PieChartIcon,
+  Activity,
+  Percent,
+  Loader2,
+} from "lucide-react";
 
 // Components
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { StatsCard } from '@/components/common/StatsCard';
-import { DataTable } from '@/components/common/DataTable';
-import { Badge } from '@/components/common/Badge';
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { StatsCard } from "@/components/common/StatsCard";
+import { DataTable } from "@/components/common/DataTable";
+import { Badge } from "@/components/common/Badge";
 
 // Hooks
-import { 
-  useDashboardStats, 
-  useTestAnalytics, 
+import {
+  useDashboardStats,
+  useTestAnalytics,
   useUserAnalytics,
   useQuestions,
-  useUsers
-} from '@/hooks/useAdminData';
+  useUsers,
+} from "@/hooks/useAdminData";
 
 export const Reports = () => {
   // 1. Fetch Data
@@ -31,93 +49,120 @@ export const Reports = () => {
   const { data: questionsData, isLoading: isQuestionsLoading } = useQuestions();
   const { data: usersData, isLoading: isTableLoading } = useUsers();
 
-  const [timeRange, setTimeRange] = useState('month');
+  const [timeRange, setTimeRange] = useState("month");
 
   // 2. Derive "Daily Active Users" from Registration Data (Proxy)
   // In a real app, you'd have a specific endpoint for DAU
   const dailyActiveUsers = useMemo(() => {
     if (!userAnalytics?.registrationData) return [];
     // Transform registration data to look like activity
-    return userAnalytics.registrationData.map((item: any) => ({
-      date: new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' }),
-      users: item.users * 5 + 500 // Simulating activity based on registrations
-    })).slice(-7); // Last 7 entries
+    return userAnalytics.registrationData
+      .map((item: any) => ({
+        date: new Date(item.date).toLocaleDateString("en-US", {
+          weekday: "short",
+        }),
+        users: item.users * 5 + 500, // Simulating activity based on registrations
+      }))
+      .slice(-7); // Last 7 entries
   }, [userAnalytics]);
 
   // 3. Derive Difficulty Distribution from Questions Data
   const difficultyDistribution = useMemo(() => {
-    if (!questionsData) return [];
-    
-    const counts = questionsData?.data?.questions?.reduce((acc: any, q: any) => {
-      acc[q.difficulty] = (acc[q.difficulty] || 0) + 1;
-      return acc;
-    }, {});
+    if (!questionsData?.data?.questions) return [];
+
+    const counts = questionsData?.data?.questions?.reduce(
+      (acc: any, q: any) => {
+        acc[q.difficulty] = (acc[q.difficulty] || 0) + 1;
+        return acc;
+      },
+      {},
+    );
 
     return [
-      { name: 'Easy', value: counts['Easy'] || 0, fill: 'hsl(var(--success))' },
-      { name: 'Medium', value: counts['Medium'] || 0, fill: 'hsl(var(--warning))' },
-      { name: 'Hard', value: counts['Hard'] || 0, fill: 'hsl(var(--destructive))' },
-    ].filter(d => d.value > 0);
-  }, [questionsData]);
+      { name: "Easy", value: counts["Easy"] || 0, fill: "hsl(var(--success))" },
+      {
+        name: "Medium",
+        value: counts["Medium"] || 0,
+        fill: "hsl(var(--warning))",
+      },
+      {
+        name: "Hard",
+        value: counts["Hard"] || 0,
+        fill: "hsl(var(--destructive))",
+      },
+    ].filter((d) => d.value > 0);
+  }, [!questionsData?.data?.questions]);
 
   // 4. Derive Conversion Funnel from Stats
   const conversionFunnel = useMemo(() => {
     const total = stats?.totalUsers || 0;
     const subscribed = stats?.activeSubscriptions || 0;
-    
+
     return [
-      { name: 'Visitors', value: Math.floor(total * 2.5), fill: 'hsl(var(--chart-1))' },
-      { name: 'Registered', value: total, fill: 'hsl(var(--chart-2))' },
-      { name: 'Free Test Taken', value: Math.floor(total * 0.65), fill: 'hsl(var(--chart-3))' },
-      { name: 'Subscribed', value: subscribed, fill: 'hsl(var(--chart-4))' },
+      {
+        name: "Visitors",
+        value: Math.floor(total * 2.5),
+        fill: "hsl(var(--chart-1))",
+      },
+      { name: "Registered", value: total, fill: "hsl(var(--chart-2))" },
+      {
+        name: "Free Test Taken",
+        value: Math.floor(total * 0.65),
+        fill: "hsl(var(--chart-3))",
+      },
+      { name: "Subscribed", value: subscribed, fill: "hsl(var(--chart-4))" },
     ];
   }, [stats]);
 
   // 5. Derive Top Performers from Users List (Simulation)
   // Since we don't have scores in the user object, we simulate scores for the UI demo
   const topPerformers = useMemo(() => {
-    if (!usersData) return [];
-    
-    return usersData
-      .filter((u: any) => u.status === 'Active')
+    if (!usersData?.data?.users) return [];
+
+    return usersData?.data?.users
+      ?.filter((u: any) => u.status === "Active")
       .slice(0, 5)
       .map((u: any, index: number) => ({
         rank: index + 1,
         name: u.name,
-        category: 'General', // Placeholder as per mock
+        category: "General", // Placeholder as per mock
         testsAttempted: u.freeTestsUsed + (u.activeSubscriptions ? 20 : 5),
-        avgScore: `${85 + (5 - index)}%` // Simulated score descending
+        avgScore: `${85 + (5 - index)}%`, // Simulated score descending
       }));
-  }, [usersData]);
+  }, [usersData?.data?.users]);
 
   const topPerformersColumns = [
-    { 
-      key: 'rank', 
-      label: 'Rank',
+    {
+      key: "rank",
+      label: "Rank",
       render: (item: any) => (
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-          item.rank === 1 ? 'bg-yellow-100 text-yellow-700' :
-          item.rank === 2 ? 'bg-gray-100 text-gray-700' :
-          item.rank === 3 ? 'bg-orange-100 text-orange-700' :
-          'bg-muted text-muted-foreground'
-        }`}>
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+            item.rank === 1
+              ? "bg-yellow-100 text-yellow-700"
+              : item.rank === 2
+                ? "bg-gray-100 text-gray-700"
+                : item.rank === 3
+                  ? "bg-orange-100 text-orange-700"
+                  : "bg-muted text-muted-foreground"
+          }`}
+        >
           {item.rank}
         </div>
-      )
+      ),
     },
-    { key: 'name', label: 'User Name' },
-    { key: 'category', label: 'Category' },
-    { key: 'testsAttempted', label: 'Tests Attempted' },
-    { 
-      key: 'avgScore', 
-      label: 'Avg Score',
-      render: (item: any) => (
-        <Badge variant="success">{item.avgScore}</Badge>
-      )
+    { key: "name", label: "User Name" },
+    { key: "category", label: "Category" },
+    { key: "testsAttempted", label: "Tests Attempted" },
+    {
+      key: "avgScore",
+      label: "Avg Score",
+      render: (item: any) => <Badge variant="success">{item.avgScore}</Badge>,
     },
   ];
 
-  const isLoading = isTestsLoading || isUsersLoading || isQuestionsLoading || isTableLoading;
+  const isLoading =
+    isTestsLoading || isUsersLoading || isQuestionsLoading || isTableLoading;
 
   if (isLoading) {
     return (
@@ -131,14 +176,17 @@ export const Reports = () => {
 
   // Safe defaults
   const attemptsData = testAnalytics?.testAttemptsByCategory || [];
-  const mostPopularCat = attemptsData.length > 0 
-    ? attemptsData.reduce((prev:any, current:any) => (prev.attempts > current.attempts) ? prev : current).category 
-    : 'N/A';
+  const mostPopularCat =
+    attemptsData.length > 0
+      ? attemptsData.reduce((prev: any, current: any) =>
+          prev.attempts > current.attempts ? prev : current,
+        ).category
+      : "N/A";
 
   return (
-    <DashboardLayout 
-      title="Reports & Analytics" 
-      breadcrumbs={[{ label: 'Reports' }]}
+    <DashboardLayout
+      title="Reports & Analytics"
+      breadcrumbs={[{ label: "Reports" }]}
     >
       {/* Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -180,23 +228,34 @@ export const Reports = () => {
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={attemptsData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis 
-                dataKey="category" 
-                type="category" 
-                tick={{ fontSize: 11 }} 
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+              />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 12 }}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <YAxis
+                dataKey="category"
+                type="category"
+                tick={{ fontSize: 11 }}
                 width={100}
                 stroke="hsl(var(--muted-foreground))"
               />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))', 
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px'
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "8px",
                 }}
               />
-              <Bar dataKey="attempts" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+              <Bar
+                dataKey="attempts"
+                fill="hsl(var(--primary))"
+                radius={[0, 4, 4, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -209,22 +268,32 @@ export const Reports = () => {
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={dailyActiveUsers}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-              <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'hsl(var(--card))', 
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px'
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+              />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 12 }}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <YAxis
+                tick={{ fontSize: 12 }}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "8px",
                 }}
               />
-              <Line 
-                type="monotone" 
-                dataKey="users" 
-                stroke="hsl(var(--success))" 
+              <Line
+                type="monotone"
+                dataKey="users"
+                stroke="hsl(var(--success))"
                 strokeWidth={2}
-                dot={{ fill: 'hsl(var(--success))' }}
+                dot={{ fill: "hsl(var(--success))" }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -257,20 +326,20 @@ export const Reports = () => {
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
                     }}
                   />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                    No questions available to analyze
-                </div>
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                No questions available to analyze
+              </div>
             )}
           </div>
         </div>
@@ -285,7 +354,7 @@ export const Reports = () => {
             {conversionFunnel.map((stage, index) => {
               const maxValue = conversionFunnel[0].value;
               const width = maxValue > 0 ? (stage.value / maxValue) * 100 : 0;
-              
+
               return (
                 <div key={stage.name} className="relative">
                   <div className="flex items-center justify-between mb-1">
@@ -295,11 +364,11 @@ export const Reports = () => {
                     </span>
                   </div>
                   <div className="h-8 bg-muted rounded-lg overflow-hidden">
-                    <div 
+                    <div
                       className="h-full rounded-lg transition-all duration-500"
-                      style={{ 
+                      style={{
                         width: `${width}%`,
-                        backgroundColor: stage.fill
+                        backgroundColor: stage.fill,
                       }}
                     />
                   </div>
@@ -317,7 +386,7 @@ export const Reports = () => {
             <Award className="w-5 h-5 text-primary" />
             Top Performers
           </h3>
-          <select 
+          <select
             className="input-field w-48"
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
