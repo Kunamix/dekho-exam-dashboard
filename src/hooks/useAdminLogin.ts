@@ -47,7 +47,6 @@ interface UpdatePasswordPayload {
   newPassword: string;
 }
 
-
 export const useAdminLogin = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -107,49 +106,25 @@ export const useAdminLogin = () => {
 };
 
 export const useLogout = () => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async () => {
-      const response = await api.post("/admin-auth/admin-logout", {});
-      return response.data;
-    },
-
-    onSuccess: (responseBody) => {
-      const { message } = responseBody;
-
-      // 🔐 Clear client-side auth data
+  return async () => {
+    try {
+      // Call logout API to invalidate tokens on server
+      await api.post("/admin-auth/admin-logout");
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      // ✅ Clear localStorage (this prevents refresh attempts)
       localStorage.removeItem("user_info");
-    
-      sessionStorage.clear();
 
-      // 🧹 Clear React Query cache
+      // Clear React Query cache
       queryClient.clear();
 
-      toast.success("Logged out", {
-        description: message || "Logout successful",
-      });
-
-      // 🚀 Redirect to login
-      navigate("/", { replace: true });
-    },
-
-    onError: (error: any) => {
-      // Even if backend fails, force logout on client
-      localStorage.removeItem("user_info");
-      localStorage.removeItem("accessToken");
-      sessionStorage.clear();
-      queryClient.clear();
-
-      const message =
-        error.response?.data?.message || "Session expired. Please login again.";
-
-      toast.error("Logged out", { description: message });
-
-      navigate("/", { replace: true });
-    },
-  });
+      // Redirect to login
+      window.location.href = "/";
+    }
+  };
 };
 
 export const useUpdateProfile = () => {
@@ -157,10 +132,7 @@ export const useUpdateProfile = () => {
 
   return useMutation({
     mutationFn: async (payload: UpdateProfilePayload) => {
-      const response = await api.put(
-        "/user/update-profile",
-        payload
-      );
+      const response = await api.put("/user/update-profile", payload);
       return response.data;
     },
 
@@ -179,9 +151,7 @@ export const useUpdateProfile = () => {
     },
 
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.message || "Profile update failed"
-      );
+      toast.error(error.response?.data?.message || "Profile update failed");
     },
   });
 };
@@ -194,15 +164,11 @@ export const useUpdateProfilePic = () => {
       const formData = new FormData();
       formData.append("avatar", file);
 
-      const response = await api.put(
-        "/admin/profile/avatar",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const response = await api.put("/admin/profile/avatar", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       return response.data;
     },
@@ -222,7 +188,7 @@ export const useUpdateProfilePic = () => {
 
     onError: (error: any) => {
       toast.error(
-        error.response?.data?.message || "Profile picture upload failed"
+        error.response?.data?.message || "Profile picture upload failed",
       );
     },
   });
@@ -231,25 +197,18 @@ export const useUpdateProfilePic = () => {
 export const useUpdatePassword = () => {
   return useMutation({
     mutationFn: async (payload: UpdatePasswordPayload) => {
-      const response = await api.put(
-        "/user/update-password",
-        payload
-      );
+      const response = await api.put("/user/update-password", payload);
       return response.data;
     },
 
     onSuccess: (responseBody) => {
       toast.success("Password updated", {
-        description:
-          responseBody?.message || "Password changed successfully",
+        description: responseBody?.message || "Password changed successfully",
       });
     },
 
     onError: (error: any) => {
-      toast.error(
-        error.response?.data?.message || "Password update failed"
-      );
+      toast.error(error.response?.data?.message || "Password update failed");
     },
   });
 };
-

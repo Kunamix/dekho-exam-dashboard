@@ -8,6 +8,21 @@ const api = axios.create({
   }
 });
 
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -20,31 +35,69 @@ api.interceptors.response.use(
     const status = error.response.status;
     const url = originalRequest.url || "";
 
-     // Check if this is a refresh token request to prevent infinite loop
     const isRefreshEndpoint = url.includes("/admin-auth/admin-refresh-token");
     const isLogoutEndpoint = url.includes("/admin-auth/admin-logout");
 
-     // Don't retry if:
-    // 1. This is already a refresh token request
-    // 2. This is a logout request
-    // 3. We already tried to refresh (prevents infinite loop)
-    if (isRefreshEndpoint || isLogoutEndpoint || originalRequest._retry) {
+    // ✅ Don't intercept refresh or logout endpoints
+    if (isRefreshEndpoint || isLogoutEndpoint) {
       return Promise.reject(error);
     }
 
-    if(status === 401){
+    // ✅ Handle 401 errors (expired access token)
+    if (status === 401 && !originalRequest._retry) {
+      // Check if user has user_info (was previously logged in)
+      const userInfo = localStorage.getItem('user_info');
+      
+      if (!userInfo) {
+        // User was never logged in or intentionally logged out
+        // Don't try to refresh
+        return Promise.reject(error);
+      }
+
+      // ✅ User was logged in - try to refresh
+      if (isRefreshing) {
+        // Already refreshing, queue this request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => {
+            return api(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
-        await await api.post('/admin-auth/admin-refresh-token', {});
-
+        // ✅ Try to refresh the token
+        await api.post('/admin-auth/admin-refresh-token', {});
+        
+        isRefreshing = false;
+        processQueue(null, 'token');
+        
+        // ✅ Retry the original request with new access token
         return api(originalRequest);
       } catch (refreshError) {
+        isRefreshing = false;
+        processQueue(refreshError, null);
+        
+        // ✅ Refresh failed - both tokens expired (after 30 days)
+        // Clear localStorage and redirect to login
         localStorage.removeItem('user_info');
-        window.location.href = '/';
+        
+        // Only redirect if not already on login page
+        if (window.location.pathname !== '/' && 
+            !window.location.pathname.includes('/login')) {
+          window.location.href = '/';
+        }
+        
         return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );

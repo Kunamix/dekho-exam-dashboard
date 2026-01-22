@@ -11,7 +11,7 @@ interface HeaderProps {
 }
 
 export const Header = ({ title, breadcrumbs = [] }: HeaderProps) => {
-  const { mutate: logout } = useLogout();
+  const logout = useLogout();
   const { isOpen, toggle } = useSidebarContext();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -26,8 +26,8 @@ export const Header = ({ title, breadcrumbs = [] }: HeaderProps) => {
     }
   }, []);
 
-  const userName = user?.data?.name || "User";
-  const userRole = user?.data?.role || "Admin";
+  const userName = user?.name || "User";
+  const userRole = user?.role || "Admin";
 
   const initials = userName
     .split(" ")

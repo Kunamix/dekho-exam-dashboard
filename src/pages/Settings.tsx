@@ -43,11 +43,11 @@ export const Settings = () => {
         localStorage.getItem("user_info") || "{}",
       );
 
-      setUser(storedUser.data);
+      setUser(storedUser);
       setSettings({
-        name: storedUser?.data?.name ?? "",
-        email: storedUser?.data?.email ?? "",
-        phoneNumber: storedUser?.data?.phoneNumber ?? "",
+        name: storedUser?.name ?? "",
+        email: storedUser?.email ?? "",
+        phoneNumber: storedUser?.phoneNumber ?? "",
       });
     } catch {
       setUser({});
