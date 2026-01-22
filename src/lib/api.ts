@@ -20,24 +20,23 @@ api.interceptors.response.use(
     const status = error.response.status;
     const url = originalRequest.url || "";
 
+     // Check if this is a refresh token request to prevent infinite loop
     const isRefreshEndpoint = url.includes("/admin-auth/admin-refresh-token");
     const isLogoutEndpoint = url.includes("/admin-auth/admin-logout");
-    const isMeEndpoint = url.includes("/admin-auth/me");
-    const isLoggedOut = localStorage.getItem("admin_logged_out") === "true";
 
-    if (isRefreshEndpoint || isLogoutEndpoint || isMeEndpoint || isLoggedOut) {
+     // Don't retry if:
+    // 1. This is already a refresh token request
+    // 2. This is a logout request
+    // 3. We already tried to refresh (prevents infinite loop)
+    if (isRefreshEndpoint || isLogoutEndpoint || originalRequest._retry) {
       return Promise.reject(error);
     }
 
-    if(status === 401 && !originalRequest._retry){
+    if(status === 401){
       originalRequest._retry = true;
 
       try {
-        await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/auth/refresh-token`,
-          {},
-          {withCredentials:true}
-        );
+        await await api.post('/admin-auth/admin-refresh-token', {});
 
         return api(originalRequest);
       } catch (refreshError) {
