@@ -73,6 +73,39 @@ export const useDeleteCategory = () => {
   });
 };
 
+export const useAssignSubjectsToCategory = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ 
+      categoryId, 
+      subjects 
+    }: { 
+      categoryId: string; 
+      subjects: Array<{
+        subjectId: string;
+        questionsPerTest: number;
+        displayOrder: number;
+      }> 
+    }) => {
+      const response = await api.put(
+        `/category/assign-subject/${categoryId}/assign-subjects`,
+        { subjects }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      toast.success("Subjects assigned successfully");
+    },
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.message || "Failed to assign subjects"
+      );
+    },
+  });
+};
+
 // --- 2. SUBJECTS ---
 
 export const useCreateSubject = () => {
