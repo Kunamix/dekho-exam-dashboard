@@ -79,7 +79,7 @@ export const Tests = () => {
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   // Helpers
-  const getCategoryName = (id: string) => categoriesData.find((c: any) => c.id === id)?.name || 'Unknown';
+  const getCategoryName = (id: string) => categoriesData?.data?.categories?.find((c: any) => c.id === id)?.name || 'Unknown';
 
   // Handlers
   const handleOpenModal = (test?: Test) => {
@@ -250,7 +250,7 @@ export const Tests = () => {
             className="input-field w-48"
           >
             <option value="">All Categories</option>
-            {categoriesData?.data?.category?.map((cat: any) => (
+            {categoriesData?.data?.categories?.map((cat: any) => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
@@ -317,7 +317,7 @@ export const Tests = () => {
               disabled={isSubmitting}
             >
               <option value="">Select Category</option>
-              {categoriesData?.data?.category?.map((cat: any) => (
+              {categoriesData?.data?.categories?.map((cat: any) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
@@ -330,7 +330,7 @@ export const Tests = () => {
                 Question Distribution for {getCategoryName(formData.categoryId)}
               </h4>
               <div className="grid grid-cols-2 gap-3">
-                {subjectsData.slice(0, 4).map((subject: any) => (
+                {subjectsData?.data?.subjects?.slice(0, 4).map((subject: any) => (
                   <div key={subject.id} className="flex items-center justify-between bg-card p-3 rounded-lg">
                     <span className="text-sm">{subject.name}</span>
                     <span className="text-sm font-medium text-primary">25 questions</span>

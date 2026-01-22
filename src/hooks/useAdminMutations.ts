@@ -240,7 +240,7 @@ export const useCreateTest = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: any) => {
-      const res = await api.post('/tests', data);
+      const res = await api.post('/test/create', data);
       return res.data;
     },
     onSuccess: () => {
@@ -254,7 +254,7 @@ export const useUpdateTest = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const res = await api.patch(`/tests/${id}`, data);
+      const res = await api.patch(`/test/update-test/${id}`, data);
       return res.data;
     },
     onSuccess: () => {
@@ -268,7 +268,7 @@ export const useDeleteTest = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id:string) => {
-      const res = await api.delete(`/tests/${id}`);
+      const res = await api.delete(`/test/delete-test/${id}`);
       return res.data;
     },
     onSuccess: () => {

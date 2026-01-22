@@ -75,7 +75,7 @@ export const useTests = () => {
   return useQuery({
     queryKey: ['tests'],
     queryFn: async () => {
-      const { data } = await api.get('/tests');
+      const { data } = await api.get('/test/get-all-tests');
       return data;
     }
   });
@@ -217,3 +217,12 @@ export const useTestAnalytics = () => {
   });
 };
 
+export const useReportsAnalytics = () => {
+  return useQuery({
+    queryKey: ['reports-analytics'],
+    queryFn: async () => {
+      const { data } = await api.get('/dashboard/get-reports-analytics');
+      return data.data;
+    },
+  });
+};

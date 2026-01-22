@@ -25,6 +25,7 @@ import {
   Percent,
   Loader2,
 } from "lucide-react";
+import { format } from "date-fns";
 
 // Components
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -35,134 +36,82 @@ import { Badge } from "@/components/common/Badge";
 // Hooks
 import {
   useDashboardStats,
-  useTestAnalytics,
-  useUserAnalytics,
-  useQuestions,
-  useUsers,
+  useReportsAnalytics,
 } from "@/hooks/useAdminData";
 
 export const Reports = () => {
-  // 1. Fetch Data
-  const { data: stats } = useDashboardStats();
-  const { data: testAnalytics, isLoading: isTestsLoading } = useTestAnalytics();
-  const { data: userAnalytics, isLoading: isUsersLoading } = useUserAnalytics();
-  const { data: questionsData, isLoading: isQuestionsLoading } = useQuestions();
-  const { data: usersData, isLoading: isTableLoading } = useUsers();
-
   const [timeRange, setTimeRange] = useState("month");
 
-  // 2. Derive "Daily Active Users" from Registration Data (Proxy)
-  // In a real app, you'd have a specific endpoint for DAU
-  const dailyActiveUsers = useMemo(() => {
-    if (!userAnalytics?.registrationData) return [];
-    // Transform registration data to look like activity
-    return userAnalytics.registrationData
-      .map((item: any) => ({
-        date: new Date(item.date).toLocaleDateString("en-US", {
-          weekday: "short",
-        }),
-        users: item.users * 5 + 500, // Simulating activity based on registrations
-      }))
-      .slice(-7); // Last 7 entries
-  }, [userAnalytics]);
+  // Fetch Data
+  const { data: dashboardStats, isLoading: isStatsLoading } = useDashboardStats();
+  const { data: reportsData, isLoading: isReportsLoading } = useReportsAnalytics();
 
-  // 3. Derive Difficulty Distribution from Questions Data
+  // Extract stats
+  const stats = useMemo(() => dashboardStats?.data || {}, [dashboardStats]);
+
+  // Process Daily Registrations
+  const dailyRegistrations = useMemo(() => {
+    if (!reportsData?.dailyRegistrations) return [];
+    return reportsData.dailyRegistrations.map((item: any) => ({
+      date: format(new Date(item.date), 'EEE'),
+      users: item.users
+    }));
+  }, [reportsData]);
+
+  // Process Difficulty Distribution
   const difficultyDistribution = useMemo(() => {
-    if (!questionsData?.data?.questions) return [];
+    if (!reportsData?.difficultyDistribution) return [];
+    
+    const colorMap: Record<string, string> = {
+      'EASY': 'hsl(142, 76%, 36%)',
+      'MEDIUM': 'hsl(48, 96%, 53%)',
+      'HARD': 'hsl(0, 84%, 60%)'
+    };
 
-    const counts = questionsData?.data?.questions?.reduce(
-      (acc: any, q: any) => {
-        acc[q.difficulty] = (acc[q.difficulty] || 0) + 1;
-        return acc;
-      },
-      {},
-    );
+    return reportsData.difficultyDistribution.map((item: any) => ({
+      name: item.name,
+      value: item.value,
+      fill: colorMap[item.name] || 'hsl(var(--primary))'
+    }));
+  }, [reportsData]);
 
-    return [
-      { name: "Easy", value: counts["Easy"] || 0, fill: "hsl(var(--success))" },
-      {
-        name: "Medium",
-        value: counts["Medium"] || 0,
-        fill: "hsl(var(--warning))",
-      },
-      {
-        name: "Hard",
-        value: counts["Hard"] || 0,
-        fill: "hsl(var(--destructive))",
-      },
-    ].filter((d) => d.value > 0);
-  }, [!questionsData?.data?.questions]);
-
-  // 4. Derive Conversion Funnel from Stats
+  // Process Conversion Funnel
   const conversionFunnel = useMemo(() => {
-    const total = stats?.totalUsers || 0;
-    const subscribed = stats?.activeSubscriptions || 0;
-
-    return [
-      {
-        name: "Visitors",
-        value: Math.floor(total * 2.5),
-        fill: "hsl(var(--chart-1))",
-      },
-      { name: "Registered", value: total, fill: "hsl(var(--chart-2))" },
-      {
-        name: "Free Test Taken",
-        value: Math.floor(total * 0.65),
-        fill: "hsl(var(--chart-3))",
-      },
-      { name: "Subscribed", value: subscribed, fill: "hsl(var(--chart-4))" },
+    if (!reportsData?.conversionFunnel) return [];
+    
+    const colors = [
+      'hsl(221, 83%, 53%)',
+      'hsl(142, 76%, 36%)',
+      'hsl(280, 65%, 60%)'
     ];
-  }, [stats]);
 
-  // 5. Derive Top Performers from Users List (Simulation)
-  // Since we don't have scores in the user object, we simulate scores for the UI demo
+    return reportsData.conversionFunnel.map((item: any, index: number) => ({
+      ...item,
+      fill: colors[index] || 'hsl(var(--primary))'
+    }));
+  }, [reportsData]);
+
+  // Process Category Attempts
+  const categoryAttempts = useMemo(() => {
+    return reportsData?.testAttemptsByCategory || [];
+  }, [reportsData]);
+
+  // Process Top Performers
   const topPerformers = useMemo(() => {
-    if (!usersData?.data?.users) return [];
+    if (!reportsData?.topPerformers) return [];
+    
+    return reportsData.topPerformers.map((user: any, index: number) => ({
+      rank: index + 1,
+      id: user.userId,
+      name: user.name || 'Unknown User',
+      email: user.email,
+      testsAttempted: user.testsAttempted,
+      avgScore: `${Number(user.avgScore).toFixed(1)}%`,
+      status: 'Active'
+    }));
+  }, [reportsData]);
 
-    return usersData?.data?.users
-      ?.filter((u: any) => u.status === "Active")
-      .slice(0, 5)
-      .map((u: any, index: number) => ({
-        rank: index + 1,
-        name: u.name,
-        category: "General", // Placeholder as per mock
-        testsAttempted: u.freeTestsUsed + (u.activeSubscriptions ? 20 : 5),
-        avgScore: `${85 + (5 - index)}%`, // Simulated score descending
-      }));
-  }, [usersData?.data?.users]);
-
-  const topPerformersColumns = [
-    {
-      key: "rank",
-      label: "Rank",
-      render: (item: any) => (
-        <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-            item.rank === 1
-              ? "bg-yellow-100 text-yellow-700"
-              : item.rank === 2
-                ? "bg-gray-100 text-gray-700"
-                : item.rank === 3
-                  ? "bg-orange-100 text-orange-700"
-                  : "bg-muted text-muted-foreground"
-          }`}
-        >
-          {item.rank}
-        </div>
-      ),
-    },
-    { key: "name", label: "User Name" },
-    { key: "category", label: "Category" },
-    { key: "testsAttempted", label: "Tests Attempted" },
-    {
-      key: "avgScore",
-      label: "Avg Score",
-      render: (item: any) => <Badge variant="success">{item.avgScore}</Badge>,
-    },
-  ];
-
-  const isLoading =
-    isTestsLoading || isUsersLoading || isQuestionsLoading || isTableLoading;
+  const isLoading = isStatsLoading || isReportsLoading;
 
   if (isLoading) {
     return (
@@ -174,14 +123,33 @@ export const Reports = () => {
     );
   }
 
-  // Safe defaults
-  const attemptsData = testAnalytics?.testAttemptsByCategory || [];
-  const mostPopularCat =
-    attemptsData.length > 0
-      ? attemptsData.reduce((prev: any, current: any) =>
-          prev.attempts > current.attempts ? prev : current,
-        ).category
-      : "N/A";
+  const topPerformersColumns = [
+    {
+      key: "rank",
+      label: "Rank",
+      render: (item: any) => (
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+            item.rank === 1 ? "bg-yellow-100 text-yellow-700" : 
+            item.rank === 2 ? "bg-gray-100 text-gray-700" : 
+            item.rank === 3 ? "bg-orange-100 text-orange-700" :
+            "bg-blue-100 text-blue-700"
+        }`}>
+          {item.rank}
+        </div>
+      ),
+    },
+    { key: "name", label: "User Name" },
+    { key: "testsAttempted", label: "Tests Attempted" },
+    {
+      key: "avgScore",
+      label: "Avg Score",
+      render: (item: any) => (
+        <Badge variant={parseFloat(item.avgScore) > 80 ? "success" : parseFloat(item.avgScore) > 60 ? "warning" : "destructive"}>
+          {item.avgScore}
+        </Badge>
+      ),
+    },
+  ];
 
   return (
     <DashboardLayout
@@ -192,29 +160,31 @@ export const Reports = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
           title="Most Popular Category"
-          value={mostPopularCat}
+          value={reportsData?.mostPopularCategory || 'N/A'}
           icon={Award}
           variant="primary"
+          subtitle={`${reportsData?.mostPopularAttempts || 0} attempts`}
         />
         <StatsCard
-          title="Most Attempted Test"
-          value="SSC Mock Test 1" // Placeholder
+          title="Total Test Attempts"
+          value={(reportsData?.totalTestAttempts || 0).toLocaleString()}
           icon={Target}
           variant="success"
+          subtitle="Last 30 days"
         />
         <StatsCard
           title="Average Test Score"
-          value="72.5%" // Placeholder
+          value={`${reportsData?.averageTestScore || 0}%`}
           icon={Percent}
-          change={4.2}
           variant="warning"
+          subtitle="Last 30 days"
         />
         <StatsCard
-          title="User Retention Rate"
-          value="68.3%" // Placeholder
+          title="Active Subscribers"
+          value={stats.activeSubscriptions || 0}
           icon={Users}
-          change={2.8}
-          variant="primary"
+          variant="info"
+          subtitle={`${stats.revenueGrowth > 0 ? '+' : ''}${stats.revenueGrowth || 0}% growth`}
         />
       </div>
 
@@ -227,73 +197,59 @@ export const Reports = () => {
             Category-wise Test Attempts
           </h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={attemptsData} layout="vertical">
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
+            <BarChart data={categoryAttempts} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 12 }} />
+              <YAxis 
+                dataKey="category" 
+                type="category" 
+                tick={{ fontSize: 11 }} 
+                width={100} 
               />
-              <XAxis
-                type="number"
-                tick={{ fontSize: 12 }}
-                stroke="hsl(var(--muted-foreground))"
-              />
-              <YAxis
-                dataKey="category"
-                type="category"
-                tick={{ fontSize: 11 }}
-                width={100}
-                stroke="hsl(var(--muted-foreground))"
-              />
-              <Tooltip
+              <Tooltip 
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
                 }}
               />
-              <Bar
-                dataKey="attempts"
-                fill="hsl(var(--primary))"
+              <Bar 
+                dataKey="attempts" 
+                fill="hsl(var(--primary))" 
                 radius={[0, 4, 4, 0]}
+                barSize={32}
               />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Daily Active Users */}
+        {/* Daily User Registrations */}
         <div className="dashboard-card p-6">
           <h3 className="section-title mb-4 flex items-center gap-2">
             <Activity className="w-5 h-5 text-primary" />
-            Active Users Activity (Last 7 Days)
+            User Registrations (Last 7 Days)
           </h3>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={dailyActiveUsers}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-              />
-              <XAxis
-                dataKey="date"
+            <LineChart data={dailyRegistrations}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis 
+                dataKey="date" 
                 tick={{ fontSize: 12 }}
-                stroke="hsl(var(--muted-foreground))"
               />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                stroke="hsl(var(--muted-foreground))"
-              />
-              <Tooltip
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip 
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
                 }}
               />
-              <Line
-                type="monotone"
-                dataKey="users"
-                stroke="hsl(var(--success))"
+              <Line 
+                type="monotone" 
+                dataKey="users" 
+                stroke="hsl(var(--success))" 
                 strokeWidth={2}
-                dot={{ fill: "hsl(var(--success))" }}
+                dot={{ fill: 'hsl(var(--success))' }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -326,11 +282,11 @@ export const Reports = () => {
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Pie>
-                  <Tooltip
+                  <Tooltip 
                     contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
                     }}
                   />
                   <Legend />
@@ -348,16 +304,16 @@ export const Reports = () => {
         <div className="dashboard-card p-6">
           <h3 className="section-title mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-primary" />
-            Subscription Conversion Funnel
+            User Conversion Funnel
           </h3>
-          <div className="space-y-3">
-            {conversionFunnel.map((stage, index) => {
-              const maxValue = conversionFunnel[0].value;
-              const width = maxValue > 0 ? (stage.value / maxValue) * 100 : 0;
-
+          <div className="space-y-4">
+            {conversionFunnel.map((stage) => {
+              const maxValue = conversionFunnel[0]?.value || 1;
+              const width = Math.max((stage.value / maxValue) * 100, 5);
+              
               return (
                 <div key={stage.name} className="relative">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium">{stage.name}</span>
                     <span className="text-sm text-muted-foreground">
                       {stage.value.toLocaleString()} ({Math.round(width)}%)
@@ -377,31 +333,6 @@ export const Reports = () => {
             })}
           </div>
         </div>
-      </div>
-
-      {/* Top Performers Table */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="section-title flex items-center gap-2">
-            <Award className="w-5 h-5 text-primary" />
-            Top Performers
-          </h3>
-          <select
-            className="input-field w-48"
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-          >
-            <option value="all">All Time</option>
-            <option value="month">This Month</option>
-            <option value="week">This Week</option>
-          </select>
-        </div>
-        <DataTable
-          columns={topPerformersColumns}
-          data={topPerformers}
-          searchable={false}
-          emptyMessage="No top performers data available"
-        />
       </div>
     </DashboardLayout>
   );
