@@ -13,7 +13,23 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if(error.response?.status === 401 && !originalRequest._retry){
+    if (!error.response) {
+      return Promise.reject(error);
+    }
+
+    const status = error.response.status;
+    const url = originalRequest.url || "";
+
+    const isRefreshEndpoint = url.includes("/admin-auth/admin-refresh-token");
+    const isLogoutEndpoint = url.includes("/admin-auth/admin-logout");
+    const isMeEndpoint = url.includes("/admin-auth/me");
+    const isLoggedOut = localStorage.getItem("admin_logged_out") === "true";
+
+    if (isRefreshEndpoint || isLogoutEndpoint || isMeEndpoint || isLoggedOut) {
+      return Promise.reject(error);
+    }
+
+    if(status === 401 && !originalRequest._retry){
       originalRequest._retry = true;
 
       try {

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAdminLogin } from "@/hooks/useAdminLogin"; // Import the new hook
-
+import logo from "/images/logo.png"
 const Login = () => {
   // Use the custom hook
   const { mutate: login, isPending, error: apiError } = useAdminLogin();
@@ -112,7 +112,7 @@ const Login = () => {
           <div className="text-center space-y-2">
             <div className="flex justify-center mb-4">
               <img 
-                src="/images/logo.png" 
+                src={logo}
                 alt="Dekho Exam Logo" 
                 className="h-12 w-auto object-contain" 
               />
@@ -348,7 +348,7 @@ const Login = () => {
           {/* Right Logo Container */}
           <div className="mb-10 p-6 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 shadow-2xl">
             <img 
-              src="/images/logo.png" 
+              src={logo} 
               alt="Dekho Exam Logo" 
               className="h-16 w-auto object-contain drop-shadow-md"
             />
