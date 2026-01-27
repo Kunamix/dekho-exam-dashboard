@@ -36,10 +36,9 @@ export const Dashboard = () => {
 
   // 2. Refresh Handler
   const handleRefresh = async () => {
-    // Invalidate all dashboard specific keys to force a refetch
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
-      queryClient.invalidateQueries({ queryKey: ['dashboard-charts'] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard','charts'] }),
       queryClient.invalidateQueries({ queryKey: ['recent-users-widget'] })
     ]);
     setLastUpdated(new Date());
@@ -59,7 +58,7 @@ export const Dashboard = () => {
   };
 
   // 4. Safe Data Defaults (Matches your Backend Response Structure)
-  const safeStats = stats || { 
+  const safeStats = stats?.data || { 
     totalUsers: 0, 
     userGrowth: 0, 
     totalCategories: 0, 
@@ -69,15 +68,16 @@ export const Dashboard = () => {
     revenueGrowth: 0
   };
 
-  // Data from useUserAnalytics (mapped from getDashboardCharts + getRecentUsersWidget)
+
   const registrationData = userAnalytics?.registrationData || [];
   const recentUsersList = userAnalytics?.recentUsers || [];
 
-  // Data from useRevenueAnalytics (mapped from getDashboardCharts)
+  console.log("user analytics ", userAnalytics)
+  console.log("user revenue ", revenueAnalytics)
+  console.log("user test ", testAnalytics)
   const monthlyRevenueData = revenueAnalytics?.monthlyRevenue || [];
   const subscriptionDistribution = revenueAnalytics?.distribution || [];
 
-  // Data from useTestAnalytics (mapped from getDashboardCharts)
   const attemptsData = testAnalytics?.testAttemptsByCategory || [];
 
   // 5. Table Columns

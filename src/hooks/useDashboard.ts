@@ -1,191 +1,135 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 
-// ==========================================
-// 1. CONTENT MANAGEMENT
-// ==========================================
-
-export const useCategories = () => {
-  return useQuery({
-    queryKey: ['categories'],
-    queryFn: async () => {
-      // Backend: getCategoriesList
-      // Unwrapping: response.data (ApiResponse) -> response.data.data (Payload)
-      const { data } = await api.get('/dashboard/get-categories-list');
-      return data.data;
-    },
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-};
-
-export const useSubjects = () => {
-  return useQuery({
-    queryKey: ['subjects'],
-    queryFn: async () => {
-      // Backend: getSubjectsList
-      const { data } = await api.get('/dashboard/get-subjects-list');
-      return data.data;
-    },
-    staleTime: 1000 * 60 * 5,
-  });
-};
-
-export const useQuestions = (filters?: { subjectId?: string; topicId?: string }) => {
-  return useQuery({
-    queryKey: ['questions', filters],
-    queryFn: async () => {
-      // Backend: getQuestionsList
-      // We convert the filters object into a query string (e.g., ?subjectId=123)
-      const params = new URLSearchParams(filters as any).toString();
-      const { data } = await api.get(`/dashboard/get-questions-list?${params}`);
-      return data.data;
-    },
-  });
-};
-
-export const useTests = () => {
-  return useQuery({
-    queryKey: ['tests'],
-    queryFn: async () => {
-      // Backend: getTestsList
-      const { data } = await api.get('/dashboard/get-tests-list');
-      return data.data;
-    },
-  });
-};
-
-// ==========================================
-// 2. USER MANAGEMENT
-// ==========================================
-
-export const useUsers = () => {
-  return useQuery({
-    queryKey: ['users'],
-    queryFn: async () => {
-      // Backend: getAllUsersData
-      const { data } = await api.get('/dashboard/get-all-users-data');
-      // The controller returns { users, total, page }. We return the users array for the table.
-      return data.data.users; 
-    },
-  });
-};
-
-// Helper to get specific user details (User Details Modal)
-// Since there isn't a specific single-user endpoint in the router yet, 
-// we filter from the main list (cached) or fetch all.
-export const useUserDetails = (userId: string | null) => {
-  return useQuery({
-    queryKey: ['user', userId],
-    queryFn: async () => {
-      if (!userId) return null;
-      const { data } = await api.get('/dashboard/get-all-users-data');
-      const user = data.data.users.find((u: any) => u.id === userId);
-      return user || null;
-    },
-    enabled: !!userId,
-  });
-};
-
-// ==========================================
-// 3. FINANCE & SUBSCRIPTIONS
-// ==========================================
-
-export const usePayments = () => {
-  return useQuery({
-    queryKey: ['payments'],
-    queryFn: async () => {
-      // Backend: getPaymentHistory
-      const { data } = await api.get('/get-payment-history');
-      return data.data;
-    },
-  });
-};
-
-export const useSubscriptionPlans = () => {
-  return useQuery({
-    queryKey: ['plans'],
-    queryFn: async () => {
-      // Backend: getSubscriptionPlansList
-      const { data } = await api.get('/get-subscription-plan-list');
-      return data.data;
-    },
-    staleTime: 1000 * 60 * 60, // 1 hour
-  });
-};
-
-// ==========================================
-// 4. DASHBOARD & ANALYTICS
-// ==========================================
-
+// ✅ CORRECTED: Removed unnecessary try/catch, proper data extraction
 export const useDashboardStats = () => {
   return useQuery({
-    queryKey: ['dashboard-stats'],
+    queryKey: ["dashboard", "stats"],
     queryFn: async () => {
-      // Backend: getDashboardStats
-      const { data } = await api.get('/dashboard/get-dashboard-stats');
-      return data.data;
+      const { data } = await api.get("/dashboard/stats");
+      return data; // ✅ Handle both nested and flat responses
     },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 };
 
-// This hook fetches all charts (Revenue, User Growth, Test Attempts, etc.)
+// ✅ CORRECTED: Consistent data extraction
 export const useDashboardCharts = () => {
   return useQuery({
-    queryKey: ['dashboard-charts'],
+    queryKey: ["dashboard", "charts"],
     queryFn: async () => {
-      // Backend: getDashboardCharts
-      const { data } = await api.get('/dashboard/get-dashboard-charts');
-      return data.data;
+      const { data } = await api.get("/dashboard/charts");
+      return data;
     },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 };
 
+// ✅ Already correct
 export const useRecentUsersWidget = () => {
   return useQuery({
-    queryKey: ['recent-users-widget'],
+    queryKey: ["recent-users-widget"],
     queryFn: async () => {
-      // Backend: getRecentUsersWidget
-      const { data } = await api.get('/dashboard/get-recent-user-widget');
-      return data.data;
+      const { data } = await api.get("/dashboard/recent-users");
+      return data;
     },
   });
 };
 
-// --- Compatibility Mappers (Optional) ---
-// If your components expect specific hooks like useRevenueAnalytics, 
-// you can wrap the main chart hook to return specific data slices.
-
+// ✅ Already correct
 export const useRevenueAnalytics = () => {
   const { data, ...rest } = useDashboardCharts();
   return {
     ...rest,
     data: {
-      // Map the backend fields to what the UI component expects
-      monthlyRevenue: data?.monthlyRevenue || [], 
-      distribution: data?.subscriptionDistribution || []
-    } 
+      monthlyRevenue: data?.data?.monthlyRevenue || [],
+      distribution: data?.data?.subscriptionDistribution || [],
+    },
   };
 };
 
+// ✅ Already correct
 export const useUserAnalytics = () => {
   const { data: chartsData, ...restCharts } = useDashboardCharts();
   const { data: recentUsers } = useRecentUsersWidget();
-  
   return {
     ...restCharts,
     data: {
-      registrationData: chartsData?.userRegistrationData || [],
-      recentUsers: recentUsers || [],
-    }
+      registrationData: chartsData?.data?.userRegistrationData || [],
+      recentUsers: recentUsers?.data || [],
+    },
   };
 };
 
+// ✅ Already correct
 export const useTestAnalytics = () => {
   const { data, ...rest } = useDashboardCharts();
   return {
     ...rest,
     data: {
-      testAttemptsByCategory: data?.testAttemptsByCategory || [],
-    }
+      testAttemptsByCategory: data?.data?.testAttemptsByCategory || [],
+    },
   };
+};
+
+// ✅ CORRECTED: Consistent data extraction
+export const useReportsAnalytics = () => {
+  return useQuery({
+    queryKey: ["reports-analytics"],
+    queryFn: async () => {
+      const { data } = await api.get("/dashboard/analytics");
+      return data;
+    },
+  });
+};
+
+// ✅ CORRECTED: Consistent data extraction
+export const useDashboardAnalytics = () => {
+  return useQuery({
+    queryKey: ["dashboard", "analytics"],
+    queryFn: async () => {
+      const { data } = await api.get("/dashboard/analytics");
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+};
+
+// ✅ CORRECTED: Consistent data extraction
+export const useRecentUsers = () => {
+  return useQuery({
+    queryKey: ["dashboard", "recent-users"],
+    queryFn: async () => {
+      const { data } = await api.get("/dashboard/recent-users");
+      return data;
+    },
+    retry: false,
+  });
+};
+
+// ✅ CORRECTED: Consistent data extraction
+export const useRecentPayments = () => {
+  return useQuery({
+    queryKey: ["dashboard", "recent-payments"],
+    queryFn: async () => {
+      const { data } = await api.get("/dashboard/recent-payments");
+      return data;
+    },
+    retry: false,
+  });
+};
+
+// ✅ CORRECTED: Consistent data extraction
+export const useRecentTests = () => {
+  return useQuery({
+    queryKey: ["dashboard", "recent-tests"],
+    queryFn: async () => {
+      const { data } = await api.get("/dashboard/recent-tests");
+      return data;
+    },
+    retry: false,
+  });
 };

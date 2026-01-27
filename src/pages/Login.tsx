@@ -12,11 +12,11 @@ import {
   Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAdminLogin } from "@/hooks/useAdminLogin"; // Import the new hook
+import { useLogin } from "@/hooks/useAuth"; // Import the new hook
 import logo from "/images/logo.png"
 const Login = () => {
   // Use the custom hook
-  const { mutate: login, isPending, error: apiError } = useAdminLogin();
+  const { mutate: login, isPending, error: apiError } = useLogin();
   
   // UI State
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");

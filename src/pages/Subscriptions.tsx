@@ -4,23 +4,20 @@ import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { Badge } from '@/components/common/Badge';
 import { 
-  Plus, Edit, Trash2, Crown, Sparkles, Loader2, IndianRupee, Users 
+  Plus, Edit, Trash2, Crown, Sparkles, Loader2, IndianRupee, Users, AlertCircle 
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Hooks
 import { 
   useSubscriptionPlans, 
-  useCategories,
-  useSubscriptionStats
-} from '@/hooks/useAdminData';
-import { 
-  useCreatePlan, 
-  useUpdatePlan, 
-  useDeletePlan 
-} from '@/hooks/useAdminMutations';
+  useSubscriptionStats,
+  useCreateSubscriptionPlan,
+  useUpdateSubscriptionPlan,
+  useDeleteSubscriptionPlan,
+  useToggleSubscriptionPlanStatus
+} from '@/hooks/useSubscription';
+import { useCategories } from '@/hooks/useCategory';
 
-// Types (Updated to match your backend)
 interface Plan {
   id: string;
   name: string;
@@ -42,30 +39,44 @@ interface Plan {
 }
 
 export const Subscriptions = () => {
-  // 1. Local State
   const [activeTab, setActiveTab] = useState<'CATEGORY_SPECIFIC' | 'ALL_CATEGORIES'>('CATEGORY_SPECIFIC');
   const [page, setPage] = useState(1);
   const LIMIT = 9;
 
-  // 2. Fetch Data
-  const { data: categoriesData = [] } = useCategories();
-  const { data: statsData } = useSubscriptionStats();
+  const { 
+    data: categoriesData,
+    isError: isCategoriesError 
+  } = useCategories();
   
-  const { data: plansResponse, isLoading: isPlansLoading } = useSubscriptionPlans({
+  const { 
+    data: statsData,
+    isError: isStatsError 
+  } = useSubscriptionStats();
+  
+  const { 
+    data: plansResponse, 
+    isLoading: isPlansLoading,
+    isError: isPlansError 
+  } = useSubscriptionPlans({
     type: activeTab,
     page,
     limit: LIMIT
   });
 
-  const plans = (plansResponse?.plans as Plan[]) || [];
-  const pagination = plansResponse?.pagination || { total: 0, totalPages: 1 };
+  const plans = (plansResponse?.data?.plans as Plan[]) || [];
+  const pagination = plansResponse?.data?.pagination || { total: 0, totalPages: 1 };
+  const stats = statsData?.data || {
+    plans: { total: 0 },
+    subscriptions: { active: 0, expiringSoon: 0 },
+    revenue: { total: 0 }
+  };
+  const categories = categoriesData?.data?.categories || [];
 
-  // 3. Mutations
-  const createMutation = useCreatePlan();
-  const updateMutation = useUpdatePlan();
-  const deleteMutation = useDeletePlan();
+  const createMutation = useCreateSubscriptionPlan();
+  const updateMutation = useUpdateSubscriptionPlan();
+  const deleteMutation = useDeleteSubscriptionPlan();
+  const toggleMutation = useToggleSubscriptionPlanStatus();
 
-  // 4. UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   
@@ -82,7 +93,6 @@ export const Subscriptions = () => {
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
-  // Helpers
   const formatDuration = (days: number) => {
     if (days >= 365) return `${Math.floor(days / 365)} Year${days >= 730 ? 's' : ''}`;
     if (days >= 30) return `${Math.floor(days / 30)} Month${days >= 60 ? 's' : ''}`;
@@ -97,7 +107,6 @@ export const Subscriptions = () => {
     }).format(Number(price));
   };
 
-  // Handlers
   const handleOpenModal = (plan?: Plan) => {
     if (plan) {
       setEditingPlan(plan);
@@ -118,7 +127,7 @@ export const Subscriptions = () => {
         description: '',
         price: 499,
         durationDays: 180,
-        type: activeTab, // Default to current tab for better UX
+        type: activeTab,
         categoryId: '',
         displayOrder: 0,
         isActive: true,
@@ -146,7 +155,6 @@ export const Subscriptions = () => {
       price: Number(formData.price),
       durationDays: Number(formData.durationDays),
       type: formData.type,
-      // Backend controller validation: categoryId should not be sent for ALL_CATEGORIES
       categoryId: formData.type === 'CATEGORY_SPECIFIC' ? formData.categoryId : undefined,
       displayOrder: Number(formData.displayOrder),
       isActive: formData.isActive,
@@ -156,28 +164,35 @@ export const Subscriptions = () => {
       if (editingPlan) {
         await updateMutation.mutateAsync({ 
           id: editingPlan.id, 
-          data: payload 
+          payload: payload 
         });
       } else {
         await createMutation.mutateAsync(payload);
       }
       setIsModalOpen(false);
     } catch (error) {
-      console.error(error);
+      // Error already handled by hook
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this plan? If it has active subscribers, it will be deactivated instead.')) {
+    if (!confirm('Delete this plan? If it has active subscribers, it will be deactivated instead.')) {
+      return;
+    }
+
+    try {
       await deleteMutation.mutateAsync(id);
+    } catch (error) {
+      // Error already handled by hook
     }
   };
 
-  const handleToggleActive = (id: string, currentStatus: boolean) => {
-    updateMutation.mutate({ 
-      id, 
-      data: { isActive: !currentStatus } 
-    });
+  const handleToggleActive = async (id: string) => {
+    try {
+      await toggleMutation.mutateAsync(id);
+    } catch (error) {
+      // Error already handled by hook
+    }
   };
 
   return (
@@ -185,31 +200,29 @@ export const Subscriptions = () => {
       title="Subscription Plans" 
       breadcrumbs={[{ label: 'Subscriptions' }]}
     >
-      {/* 1. Stats Cards */}
-      {statsData && (
+      {!isStatsError && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Total Plans</p>
-            <p className="text-3xl font-bold mt-2 text-foreground">{statsData.plans.total}</p>
+            <p className="text-3xl font-bold mt-2 text-foreground">{stats.plans.total}</p>
           </div>
           <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Active Subscribers</p>
-            <p className="text-3xl font-bold mt-2 text-primary">{statsData.subscriptions.active}</p>
+            <p className="text-3xl font-bold mt-2 text-primary">{stats.subscriptions.active}</p>
           </div>
           <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Total Revenue</p>
             <p className="text-3xl font-bold mt-2 text-success">
-              {formatPrice(statsData.revenue.total)}
+              {formatPrice(stats.revenue.total)}
             </p>
           </div>
           <div className="bg-card border border-border p-4 rounded-xl shadow-sm">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Expiring (7d)</p>
-            <p className="text-3xl font-bold mt-2 text-warning">{statsData.subscriptions.expiringSoon}</p>
+            <p className="text-3xl font-bold mt-2 text-warning">{stats.subscriptions.expiringSoon}</p>
           </div>
         </div>
       )}
 
-      {/* 2. Controls & Tabs */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex p-1 bg-muted rounded-xl">
           <button
@@ -233,17 +246,34 @@ export const Subscriptions = () => {
             All Access Plans
           </button>
         </div>
-        <button onClick={() => handleOpenModal()} className="btn-primary flex items-center gap-2 rounded-xl px-4 py-2.5">
+        <button 
+          onClick={() => handleOpenModal()} 
+          className="btn-primary flex items-center gap-2 rounded-xl px-4 py-2.5"
+          disabled={isCategoriesError}
+        >
           <Plus className="w-4 h-4" />
           Create Plan
         </button>
       </div>
 
-      {/* 3. Plans Grid */}
       {isPlansLoading ? (
          <div className="flex justify-center py-20">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
          </div>
+      ) : isPlansError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+          <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Unable to load plans</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            There was a problem loading the subscription plans. Please try again.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-outline"
+          >
+            Refresh Page
+          </button>
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -255,14 +285,12 @@ export const Subscriptions = () => {
                   ${!plan.isActive ? 'opacity-60 grayscale-[0.5]' : ''}
                 `}
               >
-                {/* Crown for Premium */}
                 {plan.type === 'ALL_CATEGORIES' && (
                   <div className="absolute -top-3 -right-3 bg-primary text-primary-foreground p-2 rounded-full shadow-lg z-10">
                     <Crown className="w-5 h-5" />
                   </div>
                 )}
 
-                {/* Card Header */}
                 <div className="p-6 pb-4 border-b border-border/50">
                   <div className="flex justify-between items-start mb-2">
                     <Badge 
@@ -273,7 +301,7 @@ export const Subscriptions = () => {
                     </Badge>
                     <Toggle
                       checked={plan.isActive}
-                      onChange={() => handleToggleActive(plan.id, plan.isActive)}
+                      onChange={() => handleToggleActive(plan.id)}
                       size="sm"
                     />
                   </div>
@@ -284,14 +312,12 @@ export const Subscriptions = () => {
                   </div>
                 </div>
 
-                {/* Description Body */}
                 <div className="p-6 flex-1 bg-muted/5">
                   <p className="text-sm text-muted-foreground line-clamp-4 whitespace-pre-wrap leading-relaxed">
                     {plan.description || "No description provided."}
                   </p>
                 </div>
 
-                {/* Footer Actions */}
                 <div className="p-4 border-t border-border flex items-center justify-between gap-3 bg-card rounded-b-2xl">
                   <div className="flex items-center text-xs text-muted-foreground font-medium px-2">
                     <Users className="w-3.5 h-3.5 mr-1.5" />
@@ -311,7 +337,7 @@ export const Subscriptions = () => {
                       className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                       title="Delete Plan"
                     >
-                      {deleteMutation.isPending && editingPlan?.id === plan.id ? (
+                      {deleteMutation.isPending ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Trash2 className="w-4 h-4" />
@@ -323,7 +349,6 @@ export const Subscriptions = () => {
             ))}
           </div>
 
-          {/* Empty State */}
           {!isPlansLoading && plans.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed border-border rounded-2xl bg-muted/5">
               <div className="bg-muted rounded-full p-4 mb-4">
@@ -340,7 +365,6 @@ export const Subscriptions = () => {
             </div>
           )}
 
-          {/* Pagination Controls */}
           {pagination.totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 mt-8">
               <button 
@@ -365,7 +389,6 @@ export const Subscriptions = () => {
         </>
       )}
 
-      {/* 4. Edit/Create Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -373,7 +396,6 @@ export const Subscriptions = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Name & Type */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="col-span-1 md:col-span-2">
               <label className="block text-sm font-semibold mb-1.5">Plan Name</label>
@@ -415,7 +437,6 @@ export const Subscriptions = () => {
             </div>
           </div>
 
-          {/* Config Section */}
           <div className="p-4 bg-muted/30 border border-border rounded-xl space-y-4">
             <div className="flex flex-col gap-2">
               <label className="text-sm font-semibold">Configuration</label>
@@ -446,22 +467,27 @@ export const Subscriptions = () => {
             {formData.type === 'CATEGORY_SPECIFIC' && (
               <div>
                 <label className="block text-sm font-medium mb-1.5">Select Category</label>
-                <select
-                  value={formData.categoryId}
-                  onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  className="input-field bg-card"
-                  required
-                >
-                  <option value="">-- Choose Category --</option>
-                  {categoriesData?.data?.categories?.map((cat: any) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
+                {isCategoriesError ? (
+                  <div className="p-3 bg-muted rounded border border-border text-sm text-muted-foreground">
+                    Unable to load categories
+                  </div>
+                ) : (
+                  <select
+                    value={formData.categoryId}
+                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                    className="input-field bg-card"
+                    required
+                  >
+                    <option value="">-- Choose Category --</option>
+                    {categories?.map((cat: any) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
           </div>
 
-          {/* Description Text Area (No Features Array) */}
           <div>
             <label className="block text-sm font-semibold mb-1.5">Description</label>
             <textarea
@@ -472,7 +498,6 @@ export const Subscriptions = () => {
             />
           </div>
 
-          {/* Footer Controls */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1.5">Display Order</label>

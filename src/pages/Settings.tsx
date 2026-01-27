@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Save } from "lucide-react";
-import {
-  useUpdatePassword,
-  useUpdateProfile,
-  useUpdateProfilePic,
-} from "@/hooks/useAdminLogin";
+
 import { toast } from "sonner";
+import { useUpdatePassword, useUpdateProfile } from "@/hooks/useUser";
 
 interface UserInfo {
   id?: string;
@@ -18,9 +15,8 @@ interface UserInfo {
 }
 
 export const Settings = () => {
-  const { mutate: updateProfile, isLoading } = useUpdateProfile();
-  const { mutate: updateProfilePic } = useUpdateProfilePic();
-  const { mutate: updatePassword, isLoading: passwordLoading } =
+  const { mutate: updateProfile, isPending:updateProfileLoading } = useUpdateProfile();
+  const { mutate: updatePassword, isPending: passwordLoading } =
     useUpdatePassword();
 
   const [user, setUser] = useState<UserInfo>({});
@@ -157,11 +153,11 @@ export const Settings = () => {
           <div className="flex justify-end pt-6 mt-6 border-t">
             <button
               onClick={handleSave}
-              disabled={isLoading}
+              disabled={updateProfileLoading}
               className="btn-primary flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
-              {isLoading ? "Saving..." : "Save Changes"}
+              {updateProfileLoading ? "Saving..." : "Save Changes"}
             </button>
           </div>
         </div>

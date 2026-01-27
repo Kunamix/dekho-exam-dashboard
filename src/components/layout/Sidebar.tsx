@@ -18,17 +18,17 @@ import { useSidebarContext } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: FolderOpen, label: 'Categories', path: '/categories' },
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: BookOpen, label: 'Subjects', path: '/subjects' },
-  { icon: HelpCircle, label: 'Questions', path: '/questions' },
   { icon: FileText, label: 'Topics', path: '/topics' },
+  { icon: HelpCircle, label: 'Questions', path: '/questions' },
+  { icon: FolderOpen, label: 'Categories', path: '/categories' },
   { icon: ClipboardList, label: 'Tests', path: '/tests' },
   { icon: CreditCard, label: 'Subscriptions', path: '/subscriptions' },
-  { icon: Users, label: 'Users', path: '/users' },
   { icon: DollarSign, label: 'Payments', path: '/payments' },
-  { icon: BarChart3, label: 'Reports', path: '/reports' },
+  { icon: Users, label: 'Users', path: '/users' },
   { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: BarChart3, label: 'Reports', path: '/reports' },
 ];
 
 export const Sidebar = () => {

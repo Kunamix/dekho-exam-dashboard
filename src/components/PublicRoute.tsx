@@ -1,9 +1,9 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useAdmin } from "@/hooks/useAdmin";
+import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
 const PublicRoute = () => {
-  const { data: user, isLoading } = useAdmin();
+  const { data: user, isLoading } = useAuth();
 
   // 1. Show a loading spinner instead of null (white screen)
   if (isLoading) {

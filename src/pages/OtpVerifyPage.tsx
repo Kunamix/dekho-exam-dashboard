@@ -12,7 +12,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useOtpVerification } from "@/hooks/useOtpVerification";
+import { useVerifyOTP } from "@/hooks/useAuth";
 
 const OTPVerification = () => {
   const location = useLocation();
@@ -28,7 +28,7 @@ const OTPVerification = () => {
     verifyError, 
     resendOtp, 
     isResending 
-  } = useOtpVerification();
+  } = useVerifyOTP();
 
   // UI State
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);

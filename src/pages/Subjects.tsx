@@ -4,18 +4,11 @@ import { DataTable } from "@/components/common/DataTable";
 import { Modal } from "@/components/common/Modal";
 import { Toggle } from "@/components/common/Toggle";
 import { Badge } from "@/components/common/Badge";
-import { Plus, Edit, Trash2, Eye, Loader2, X } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useCreateSubject, useDeleteSubject, useSubjects, useUpdateSubject } from "@/hooks/useSubject";
+import { useCategories } from "@/hooks/useCategory";
 
-// Hooks
-import { useSubjects, useCategories } from "@/hooks/useAdminData";
-import {
-  useCreateSubject,
-  useUpdateSubject,
-  useDeleteSubject,
-} from "@/hooks/useAdminMutations";
-
-// Types
 interface Subject {
   id: string;
   name: string;
@@ -31,35 +24,37 @@ interface Subject {
 }
 
 export const Subjects = () => {
-  // 1. Fetch Data
-  const { data: subjectsData, isLoading: isSubjectsLoading } = useSubjects();
-  const { data: categoriesData = [] } = useCategories();
+  const { 
+    data: subjectsData, 
+    isLoading: isSubjectsLoading,
+    isError: isSubjectsError 
+  } = useSubjects();
+  
+  const { 
+    data: categoriesData,
+    isError: isCategoriesError 
+  } = useCategories();
 
-  // 2. Mutation Hooks
   const createMutation = useCreateSubject();
   const updateMutation = useUpdateSubject();
   const deleteMutation = useDeleteSubject();
 
-  // 3. Local State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [viewingSubject, setViewingSubject] = useState<Subject | null>(null);
 
-  // Filter state
   const [selectedCategory, setSelectedCategory] = useState<string>("");
 
-  // Form State
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     isActive: true,
   });
 
-  // 4. Derived Data
   const subjects = subjectsData?.data?.subjects || [];
+  const categories = categoriesData?.data?.categories || [];
 
-  // Filter logic
   const filteredSubjects = selectedCategory
     ? subjects.filter((subject: Subject) =>
         subject.categories?.some((cat) => cat.id === selectedCategory)
@@ -68,7 +63,6 @@ export const Subjects = () => {
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
-  // Handlers
   const handleOpenModal = (subject?: Subject) => {
     if (subject) {
       setEditingSubject(subject);
@@ -117,28 +111,24 @@ export const Subjects = () => {
           id: editingSubject.id,
           data: formData,
         });
-        toast.success("Subject updated successfully");
-        handleCloseModal();
       } else {
         await createMutation.mutateAsync(formData);
-        toast.success("Subject created successfully");
-        handleCloseModal();
       }
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Something went wrong");
+      handleCloseModal();
+    } catch (error) {
+      // Error already handled by hook
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this subject?")) {
-      try {
-        await deleteMutation.mutateAsync(id);
-        toast.success("Subject deleted successfully");
-      } catch (error: any) {
-        toast.error(
-          error?.response?.data?.message || "Failed to delete subject"
-        );
-      }
+    if (!confirm("Are you sure you want to delete this subject?")) {
+      return;
+    }
+
+    try {
+      await deleteMutation.mutateAsync(id);
+    } catch (error) {
+      // Error already handled by hook
     }
   };
 
@@ -148,11 +138,8 @@ export const Subjects = () => {
         id,
         data: { isActive: !currentStatus },
       });
-      toast.success(
-        `Subject ${!currentStatus ? "activated" : "deactivated"} successfully`
-      );
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to update status");
+    } catch (error) {
+      // Error already handled by hook
     }
   };
 
@@ -249,20 +236,25 @@ export const Subjects = () => {
       title="Manage Subjects"
       breadcrumbs={[{ label: "Subjects" }]}
     >
-      {/* Top Section */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="input-field w-full sm:w-64"
-        >
-          <option value="">All Categories</option>
-          {categoriesData?.data?.category?.map((cat: any) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
+        {isCategoriesError ? (
+          <div className="w-full sm:w-64 p-3 bg-muted/30 rounded-lg border border-border">
+            <p className="text-sm text-muted-foreground">Unable to load categories</p>
+          </div>
+        ) : (
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="input-field w-full sm:w-64"
+          >
+            <option value="">All Categories</option>
+            {categories.map((cat: any) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           onClick={() => handleOpenModal()}
           className="btn-primary flex items-center gap-2"
@@ -272,10 +264,23 @@ export const Subjects = () => {
         </button>
       </div>
 
-      {/* Subjects Table */}
       {isSubjectsLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      ) : isSubjectsError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+          <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Unable to load subjects</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            There was a problem loading the subjects. Please try again.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-outline"
+          >
+            Refresh Page
+          </button>
         </div>
       ) : (
         <DataTable
@@ -286,7 +291,6 @@ export const Subjects = () => {
         />
       )}
 
-      {/* Add/Edit Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
@@ -355,7 +359,6 @@ export const Subjects = () => {
         </form>
       </Modal>
 
-      {/* View Details Modal */}
       <Modal
         isOpen={isViewModalOpen}
         onClose={handleCloseViewModal}
@@ -364,7 +367,6 @@ export const Subjects = () => {
       >
         {viewingSubject && (
           <div className="space-y-6">
-            {/* Basic Information */}
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-muted-foreground">
@@ -394,7 +396,6 @@ export const Subjects = () => {
               </div>
             </div>
 
-            {/* Statistics */}
             <div className="grid grid-cols-3 gap-4 p-4 bg-muted/30 rounded-lg">
               <div className="text-center">
                 <p className="text-2xl font-bold text-primary">
@@ -422,7 +423,6 @@ export const Subjects = () => {
               </div>
             </div>
 
-            {/* Categories List */}
             <div>
               <label className="text-sm font-medium text-muted-foreground mb-2 block">
                 Used in Categories
@@ -442,7 +442,6 @@ export const Subjects = () => {
               )}
             </div>
 
-            {/* Close Button */}
             <div className="flex justify-end pt-4">
               <button
                 onClick={handleCloseViewModal}

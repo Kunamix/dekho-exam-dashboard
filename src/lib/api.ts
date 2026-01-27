@@ -3,9 +3,6 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   withCredentials: true,
-  headers: {
-    'Content-Type':'application/json'
-  }
 });
 
 let isRefreshing = false;
@@ -35,8 +32,10 @@ api.interceptors.response.use(
     const status = error.response.status;
     const url = originalRequest.url || "";
 
-    const isRefreshEndpoint = url.includes("/admin-auth/admin-refresh-token");
-    const isLogoutEndpoint = url.includes("/admin-auth/admin-logout");
+    
+
+    const isRefreshEndpoint = url.includes("/auth/refresh-token");
+    const isLogoutEndpoint = url.includes("/auth/logout");
 
     // ✅ Don't intercept refresh or logout endpoints
     if (isRefreshEndpoint || isLogoutEndpoint) {
@@ -73,7 +72,7 @@ api.interceptors.response.use(
 
       try {
         // ✅ Try to refresh the token
-        await api.post('/admin-auth/admin-refresh-token', {});
+        await api.post('/auth/refresh-token', {});
         
         isRefreshing = false;
         processQueue(null, 'token');

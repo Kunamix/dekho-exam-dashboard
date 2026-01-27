@@ -5,90 +5,138 @@ import { Modal } from '@/components/common/Modal';
 import { Badge } from '@/components/common/Badge';
 import { 
   Download, Eye, User as UserIcon, CreditCard, ClipboardList, 
-  Ban, CheckCircle, Loader2 
+  Ban, CheckCircle, Loader2, AlertCircle 
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Hooks
-import { useUsers } from '@/hooks/useAdminData';
-import { useUpdateUserStatus ,useUserDetails } from '@/hooks/useAdminMutations';
+import { 
+  useUsers, 
+  useUserById, 
+  useToggleUserBan,
+  type User as ApiUser 
+} from '@/hooks/useUser';
 
-// Types
-interface User {
-  id: string;
-  phone: string;
-  email: string;
-  name: string;
-  role: 'Student' | 'Admin';
-  freeTestsUsed: number;
-  activeSubscriptions: number;
-  registeredOn: string;
-  lastLogin: string;
-  status: 'Active' | 'Inactive';
-}
+const transformUserForDisplay = (user: ApiUser) => ({
+  id: user.id,
+  phone: user.phoneNumber,
+  email: user.email,
+  name: user.name,
+  role: user.role === 'ADMIN' ? 'Admin' : 'Student',
+  freeTestsUsed: user.freeTestsUsed,
+  activeSubscriptions: user._count?.subscriptions || 0,
+  testAttempts: user._count?.testAttempts || 0,
+  payments: user._count?.payments || 0,
+  lastLoginAt: new Date(user.lastLoginAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }),
+  registeredOn: new Date(user.createdAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }),
+  status: user.isActive ? 'Active' : 'Inactive',
+  isEmailVerified: user.isEmailVerified,
+  isPhoneVerified: user.isPhoneVerified,
+  rawUser: user,
+});
+
+type TransformedUser = ReturnType<typeof transformUserForDisplay>;
 
 export const Users = () => {
-  // 1. Fetch Users List
-  const { data: usersData, isLoading: isUsersLoading } = useUsers();
+  const { 
+    data: usersData, 
+    isLoading: isUsersLoading,
+    isError: isUsersError 
+  } = useUsers();
   
-  // 2. Mutations
-  const statusMutation = useUpdateUserStatus();
+  const { 
+    mutate: toggleUserStatus, 
+    isPending: isTogglingStatus 
+  } = useToggleUserBan();
 
-  // 3. Local State
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'subscriptions' | 'attempts'>('profile');
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
 
-  // 4. Fetch User Details (Only when modal is open and ID is selected)
-  const { data: userDetails, isLoading: isDetailsLoading } = useUserDetails(selectedUserId);
+  const { 
+    data: userDetails, 
+    isLoading: isDetailsLoading 
+  } = useUserById(selectedUserId || undefined);
 
-  // 5. Derived Data & Filtering
-  const users = (usersData?.data?.users as User[]) || [];
+  const apiUsers = (usersData?.data?.users as ApiUser[]) || [];
+  const transformedUsers = apiUsers.map(transformUserForDisplay);
 
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = transformedUsers.filter((user) => {
     if (roleFilter && user.role !== roleFilter) return false;
     if (statusFilter && user.status !== statusFilter) return false;
     return true;
   });
 
-  // Handlers
   const handleViewUser = (userId: string) => {
     setSelectedUserId(userId);
-    setActiveTab('profile'); // Reset tab to profile when opening
+    setActiveTab('profile');
     setIsDetailModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsDetailModalOpen(false);
-    setSelectedUserId(null); // Clear selection to reset hook and cache logic if needed
+    setTimeout(() => setSelectedUserId(null), 200);
   };
 
-  const handleToggleStatus = (user: User) => {
-    const newStatus = user.status === 'Active' ? 'Inactive' : 'Active';
-    // Optimistic update or wait for server response handled by React Query
-    statusMutation.mutate({ id: user.id, status: newStatus });
-  };
-
-  const handleExport = () => {
-    toast.success('Exporting users to CSV...');
-    // In a real app: window.location.href = '/api/admin/users/export';
+  const handleToggleStatus = async (user: TransformedUser) => {
+    toggleUserStatus(user.id);
   };
 
   const columns = [
-    { key: 'id', label: 'User ID' },
-    { key: 'phone', label: 'Phone / Email', render: (item: User) => (
-      <div>
-        <p className="font-medium">{item.phone}</p>
-        <p className="text-xs text-muted-foreground">{item.email}</p>
-      </div>
-    )},
-    { key: 'name', label: 'Name', sortable: true },
+    { 
+      key: 'id', 
+      label: 'User ID',
+      width: '180px',
+      render: (item: TransformedUser) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {item.id.substring(0, 8)}...
+        </span>
+      )
+    },
+    { 
+      key: 'phone', 
+      label: 'Contact',
+      sortable: true,
+      width: '200px',
+      render: (item: TransformedUser) => (
+        <div>
+          <p className="font-medium text-sm">{item.phone}</p>
+          <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+            {item.email}
+          </p>
+          <div className="flex gap-1 mt-1">
+            {item.isPhoneVerified && (
+              <Badge variant="success" className="text-[10px] px-1 py-0">Phone ✓</Badge>
+            )}
+            {item.isEmailVerified && (
+              <Badge variant="success" className="text-[10px] px-1 py-0">Email ✓</Badge>
+            )}
+          </div>
+        </div>
+      )
+    },
+    { 
+      key: 'name', 
+      label: 'Name', 
+      sortable: true,
+      width: '150px'
+    },
     { 
       key: 'role', 
       label: 'Role',
-      render: (item: User) => (
+      width: '100px',
+      render: (item: TransformedUser) => (
         <Badge variant={item.role === 'Admin' ? 'primary' : 'info'}>
           {item.role}
         </Badge>
@@ -97,22 +145,51 @@ export const Users = () => {
     { 
       key: 'freeTestsUsed', 
       label: 'Free Tests',
-      render: (item: User) => `${item.freeTestsUsed}/2`
+      width: '100px',
+      render: (item: TransformedUser) => (
+        <span className={item.freeTestsUsed >= 2 ? 'text-destructive font-medium' : ''}>
+          {item.freeTestsUsed}/2
+        </span>
+      )
     },
     { 
       key: 'activeSubscriptions', 
       label: 'Subscriptions',
-      render: (item: User) => (
-        <Badge variant={item.activeSubscriptions > 0 ? 'success' : 'default'}>
-          {item.activeSubscriptions}
-        </Badge>
+      width: '120px',
+      render: (item: TransformedUser) => (
+        <div className="text-center">
+          <Badge variant={item.activeSubscriptions > 0 ? 'success' : 'default'}>
+            {item.activeSubscriptions}
+          </Badge>
+        </div>
       )
     },
-    { key: 'registeredOn', label: 'Registered On', sortable: true },
+    { 
+      key: 'testAttempts', 
+      label: 'Tests',
+      width: '80px',
+      render: (item: TransformedUser) => (
+        <div className="text-center">
+          <span className="font-medium">{item.testAttempts}</span>
+        </div>
+      )
+    },
+    { 
+      key: 'registeredOn', 
+      label: 'Registered',
+      sortable: true,
+      width: '130px',
+      render: (item: TransformedUser) => (
+        <div className="text-sm">
+          <p>{item.registeredOn}</p>
+        </div>
+      )
+    },
     { 
       key: 'status', 
       label: 'Status',
-      render: (item: User) => (
+      width: '100px',
+      render: (item: TransformedUser) => (
         <Badge variant={item.status === 'Active' ? 'success' : 'danger'}>
           {item.status}
         </Badge>
@@ -121,7 +198,8 @@ export const Users = () => {
     { 
       key: 'actions', 
       label: 'Actions',
-      render: (item: User) => (
+      width: '120px',
+      render: (item: TransformedUser) => (
         <div className="flex items-center gap-2">
           <button 
             onClick={() => handleViewUser(item.id)}
@@ -130,22 +208,22 @@ export const Users = () => {
           >
             <Eye className="w-4 h-4" />
           </button>
-          <button 
+          <button
             onClick={() => handleToggleStatus(item)}
-            disabled={statusMutation.isPending}
-            className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+            disabled={isTogglingStatus}
+            className={`p-2 rounded-lg transition-colors ${
               item.status === 'Active' 
                 ? 'hover:bg-destructive/10 text-destructive' 
                 : 'hover:bg-success/10 text-success'
             }`}
-            title={item.status === 'Active' ? 'Block User' : 'Unblock User'}
+            title={item.status === 'Active' ? 'Ban User' : 'Unban User'}
           >
-            {statusMutation.isPending ? (
-               <Loader2 className="w-4 h-4 animate-spin" />
+            {isTogglingStatus ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : item.status === 'Active' ? (
-               <Ban className="w-4 h-4" />
+              <Ban className="w-4 h-4" />
             ) : (
-               <CheckCircle className="w-4 h-4" />
+              <CheckCircle className="w-4 h-4" />
             )}
           </button>
         </div>
@@ -153,155 +231,173 @@ export const Users = () => {
     },
   ];
 
-  // Helper variables for Detail View
-  // If `userDetails` (full data) is loading, fallback to the `selectedUser` from the list for basic info
-  const displayUser = userDetails?.profile || users.find(u => u.id === selectedUserId);
-  const userSubscriptions = userDetails?._count?.subscriptions || [];
-  const userAttempts = userDetails?._count?.attempts || [];
-
   return (
     <DashboardLayout 
-      title="Users" 
+      title="User Management" 
       breadcrumbs={[{ label: 'Users' }]}
     >
-      {/* Top Section */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="input-field w-36"
+            className="input-field w-32"
           >
             <option value="">All Roles</option>
-            <option value="Student">Student</option>
             <option value="Admin">Admin</option>
+            <option value="Student">Student</option>
           </select>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="input-field w-36"
+            className="input-field w-32"
           >
             <option value="">All Status</option>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
         </div>
-        <button onClick={handleExport} className="btn-outline flex items-center gap-2">
-          <Download className="w-4 h-4" />
-          Export to CSV
-        </button>
       </div>
 
-      {/* Users Table */}
       {isUsersLoading ? (
-         <div className="flex justify-center py-20">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-         </div>
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      ) : isUsersError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+          <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Unable to load users</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            There was a problem loading the users. Please try again.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-outline"
+          >
+            Refresh Page
+          </button>
+        </div>
       ) : (
         <DataTable
-            columns={columns}
-            data={filteredUsers}
-            searchPlaceholder="Search by name or phone..."
-            emptyMessage="No users found"
+          columns={columns}
+          data={filteredUsers}
+          searchPlaceholder="Search by name, email or phone..."
+          emptyMessage="No users found"
         />
       )}
 
-      {/* User Details Modal */}
       <Modal
         isOpen={isDetailModalOpen}
         onClose={handleCloseModal}
         title="User Details"
         size="xl"
       >
-        {isDetailsLoading && !displayUser ? (
-           <div className="flex justify-center py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-           </div>
-        ) : displayUser ? (
+        {isDetailsLoading ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : userDetails?.data ? (
           <div>
-            {/* Tabs */}
-            <div className="flex border-b border-border mb-4">
+            <div className="flex border-b border-border mb-6">
               <button
                 onClick={() => setActiveTab('profile')}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                className={`px-4 py-3 font-medium text-sm transition-colors ${
                   activeTab === 'profile'
-                    ? 'border-primary text-primary font-medium'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <UserIcon className="w-4 h-4" />
+                <UserIcon className="w-4 h-4 inline mr-2" />
                 Profile
               </button>
               <button
                 onClick={() => setActiveTab('subscriptions')}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                className={`px-4 py-3 font-medium text-sm transition-colors ${
                   activeTab === 'subscriptions'
-                    ? 'border-primary text-primary font-medium'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <CreditCard className="w-4 h-4" />
+                <CreditCard className="w-4 h-4 inline mr-2" />
                 Subscriptions
               </button>
               <button
                 onClick={() => setActiveTab('attempts')}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                className={`px-4 py-3 font-medium text-sm transition-colors ${
                   activeTab === 'attempts'
-                    ? 'border-primary text-primary font-medium'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <ClipboardList className="w-4 h-4" />
+                <ClipboardList className="w-4 h-4 inline mr-2" />
                 Test Attempts
               </button>
             </div>
 
-            {/* Tab Content */}
             {activeTab === 'profile' && (
               <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                    <span className="text-2xl font-bold text-primary">
-                      {displayUser?.name?.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold">{displayUser.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant={displayUser.role === 'Admin' ? 'primary' : 'info'}>
-                        {displayUser.role}
-                      </Badge>
-                      <Badge variant={displayUser.status === 'Active' ? 'success' : 'danger'}>
-                        {displayUser.status}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Name</p>
+                    <p className="font-medium text-lg">{userDetails.data.name}</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Role</p>
+                    <Badge variant={userDetails.data.role === 'ADMIN' ? 'primary' : 'info'}>
+                      {userDetails.data.role}
+                    </Badge>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Phone</p>
-                    <p className="font-medium">{displayUser.phone}</p>
+                    <p className="font-medium">{userDetails.data.phoneNumber}</p>
+                    {userDetails.data.isPhoneVerified && (
+                      <Badge variant="success" className="mt-1 text-[10px]">Verified</Badge>
+                    )}
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{displayUser.email}</p>
+                    <p className="font-medium text-sm break-all">{userDetails.data.email}</p>
+                    {userDetails.data.isEmailVerified && (
+                      <Badge variant="success" className="mt-1 text-[10px]">Verified</Badge>
+                    )}
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Registered On</p>
-                    <p className="font-medium">{displayUser.createdAt}</p>
+                    <p className="font-medium">
+                      {new Date(userDetails.data.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Last Login</p>
-                    <p className="font-medium">{displayUser.lastLoginAt}</p>
+                    <p className="font-medium">
+                      {new Date(userDetails.data.lastLoginAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Free Tests Used</p>
-                    <p className="font-medium">{displayUser.freeTestsUsed}/2</p>
+                    <p className="font-medium">{userDetails.data.freeTestsUsed}/2</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Total Tests Attempted</p>
-                    <p className="font-medium">{userAttempts.length || 0}</p>
+                    <p className="font-medium">{userDetails.data._count?.testAttempts || 0}</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Active Subscriptions</p>
+                    <p className="font-medium">{userDetails.data._count?.subscriptions || 0}</p>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Total Payments</p>
+                    <p className="font-medium">{userDetails.data._count?.payments || 0}</p>
                   </div>
                 </div>
               </div>
@@ -309,38 +405,63 @@ export const Users = () => {
 
             {activeTab === 'subscriptions' && (
               <div className="space-y-4">
-                {userSubscriptions.length > 0 ? (
-                    userSubscriptions.map((sub: any, index: number) => (
-                    <div key={index} className="p-4 border border-border rounded-lg">
+                {userDetails.data.subscriptions && userDetails.data.subscriptions.length > 0 ? (
+                  userDetails.data.subscriptions.map((sub: any) => {
+                    const startDate = new Date(sub.startDate);
+                    const endDate = new Date(sub.endDate);
+                    const daysLeft = Math.ceil((endDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                    
+                    return (
+                      <div key={sub.id} className="p-4 border border-border rounded-lg">
                         <div className="flex items-start justify-between">
-                        <div>
-                            <h4 className="font-medium">{sub.plan}</h4>
-                            <Badge variant="info" >{sub.type}</Badge>
+                          <div>
+                            <h4 className="font-medium text-lg">{sub.plan?.name || 'Unknown Plan'}</h4>
+                            <div className="flex gap-2 mt-2">
+                              <Badge variant="info">{sub.type}</Badge>
+                              <Badge variant={sub.autoRenew ? 'success' : 'default'}>
+                                {sub.autoRenew ? 'Auto-Renew' : 'No Auto-Renew'}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Badge variant={sub.isActive ? 'success' : 'danger'}>
+                            {sub.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
                         </div>
-                        <Badge variant={sub.status === 'Active' ? 'success' : 'danger'}>
-                            {sub.status}
-                        </Badge>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 mt-4 text-sm">
-                        <div>
+                        <div className="grid grid-cols-4 gap-4 mt-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Plan Price</p>
+                            <p className="font-medium">₹{sub.plan?.price || 'N/A'}</p>
+                          </div>
+                          <div>
                             <p className="text-muted-foreground">Start Date</p>
-                            <p className="font-medium">{sub.startDate}</p>
-                        </div>
-                        <div>
+                            <p className="font-medium">{startDate.toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}</p>
+                          </div>
+                          <div>
                             <p className="text-muted-foreground">End Date</p>
-                            <p className="font-medium">{sub.endDate}</p>
-                        </div>
-                        <div>
+                            <p className="font-medium">{endDate.toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}</p>
+                          </div>
+                          <div>
                             <p className="text-muted-foreground">Days Left</p>
-                            <p className="font-medium text-success">{sub.daysLeft} days</p>
+                            <p className={`font-medium ${daysLeft < 7 ? 'text-destructive' : 'text-success'}`}>
+                              {daysLeft > 0 ? `${daysLeft} days` : 'Expired'}
+                            </p>
+                          </div>
                         </div>
-                        </div>
-                    </div>
-                    ))
+                      </div>
+                    );
+                  })
                 ) : (
-                    <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
-                        No active subscriptions found.
-                    </div>
+                  <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+                    No subscriptions found.
+                  </div>
                 )}
               </div>
             )}
@@ -352,30 +473,65 @@ export const Users = () => {
                     <tr className="bg-muted/50 border-b border-border">
                       <th className="px-4 py-3 text-left text-sm font-medium">Test Name</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Category</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">Attempted On</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Attempt #</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Date</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">Score</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">Percentage</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Marks</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {userAttempts.length > 0 ? (
-                        userAttempts.map((attempt: any, index: number) => (
-                        <tr key={index} className="border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
-                            <td className="px-4 py-3 font-medium text-sm">{attempt.test}</td>
-                            <td className="px-4 py-3 text-sm">{attempt.category}</td>
-                            <td className="px-4 py-3 text-sm">{attempt.attemptedOn}</td>
-                            <td className="px-4 py-3 text-sm">{attempt.score}</td>
+                    {userDetails.data.testAttempts && userDetails.data.testAttempts.length > 0 ? (
+                      userDetails.data.testAttempts.map((attempt: any) => {
+                        const percentage = parseFloat(attempt.percentage);
+                        const marks = parseFloat(attempt.totalMarks);
+                        
+                        return (
+                          <tr key={attempt.id} className="border-b border-border last:border-0 hover:bg-muted/10 transition-colors">
+                            <td className="px-4 py-3 font-medium text-sm">{attempt.test?.name || 'N/A'}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <Badge variant="info">{attempt.test?.category?.name || 'N/A'}</Badge>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-center">#{attempt.attemptNumber}</td>
+                            <td className="px-4 py-3 text-sm">
+                              {new Date(attempt.submittedAt).toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </td>
                             <td className="px-4 py-3">
-                            <Badge variant="success">{attempt.percentage}</Badge>
+                              <Badge variant={attempt.status === 'SUBMITTED' ? 'success' : 'default'}>
+                                {attempt.status}
+                              </Badge>
                             </td>
-                        </tr>
-                        ))
+                            <td className="px-4 py-3 text-sm">
+                              <div className="text-xs text-muted-foreground">
+                                {attempt.correctCount}/{attempt.totalQuestions}
+                              </div>
+                              <div className="font-medium">
+                                {attempt.attemptedCount} attempted
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className={`font-semibold ${marks >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                {marks >= 0 ? '+' : ''}{marks}
+                              </div>
+                              <div className={`text-xs ${percentage >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                {percentage >= 0 ? '+' : ''}{percentage}%
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
-                        <tr>
-                            <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                                No tests attempted yet.
-                            </td>
-                        </tr>
+                      <tr>
+                        <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No tests attempted yet.
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
@@ -383,9 +539,9 @@ export const Users = () => {
             )}
           </div>
         ) : (
-            <div className="text-center py-10 text-destructive">
-                Failed to load user details. Please try again.
-            </div>
+          <div className="text-center py-10 text-destructive">
+            Failed to load user details. Please try again.
+          </div>
         )}
       </Modal>
     </DashboardLayout>

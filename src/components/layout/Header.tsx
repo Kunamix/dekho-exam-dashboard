@@ -1,9 +1,9 @@
-import { Bell, ChevronDown, Menu, LogOut, User } from "lucide-react";
+import { Bell, ChevronDown, Menu, LogOut, User, Loader2 } from "lucide-react";
 import { useSidebarContext } from "@/contexts/SidebarContext";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useLogout } from "@/hooks/useAdminLogin";
+import { useLogout } from "@/hooks/useAuth";
 
 interface HeaderProps {
   title: string;
@@ -11,7 +11,7 @@ interface HeaderProps {
 }
 
 export const Header = ({ title, breadcrumbs = [] }: HeaderProps) => {
-  const logout = useLogout();
+  const { mutate: logout, isPending: logoutPending } = useLogout();
   const { isOpen, toggle } = useSidebarContext();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -100,10 +100,26 @@ export const Header = ({ title, breadcrumbs = [] }: HeaderProps) => {
 
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors text-left"
+                    disabled={logoutPending}
+                    className={`
+    w-full flex items-center gap-3 px-3 py-2 rounded-lg
+    text-left transition-colors
+    ${
+      logoutPending
+        ? "opacity-60 cursor-not-allowed"
+        : "hover:bg-destructive/10 text-destructive"
+    }
+  `}
                   >
-                    <LogOut className="w-4 h-4" />
-                    <span className="text-sm">Logout</span>
+                    {logoutPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <LogOut className="w-4 h-4" />
+                    )}
+
+                    <span className="text-sm">
+                      {logoutPending ? "Logging out..." : "Logout"}
+                    </span>
                   </button>
                 </div>
               </div>

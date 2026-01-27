@@ -9,40 +9,36 @@ import {
   Upload,
   Edit,
   Trash2,
-  Eye,
   Download,
   CheckCircle,
   Loader2,
   Search,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
-// Hooks
+import { useSubjects } from "@/hooks/useSubject";
+import { useTopics } from "@/hooks/useTopic";
 import {
   useQuestions,
-  useSubjects,
-  useTopics,
   useQuestionStats,
-} from "@/hooks/useAdminData";
-import {
   useCreateQuestion,
   useUpdateQuestion,
   useDeleteQuestion,
   useBulkUploadQuestions,
-} from "@/hooks/useAdminMutations";
+} from "@/hooks/useQuestion";
 
 interface Question {
   id: string;
   topicId: string;
-  questionText: string; // Updated from 'text' to match API
+  questionText: string;
   questionImageUrl?: string;
-  options: string[]; // Frontend helper, API sends option1, option2 etc.
   option1: string;
   option2: string;
   option3: string;
   option4: string;
   correctOption: number;
-  difficultyLevel: "EASY" | "MEDIUM" | "HARD"; // Updated to match Enum
+  difficultyLevel: "EASY" | "MEDIUM" | "HARD";
   explanation: string;
   explanationImageUrl?: string;
   isActive: boolean;
@@ -56,42 +52,62 @@ interface Question {
 }
 
 export const Questions = () => {
-  // 1. Local Filter & Pagination State
+  const [limit, setLimit] = useState(10);
+  const [bulkSubjectId, setBulkSubjectId] = useState("");
+  const [bulkTopicId, setBulkTopicId] = useState("");
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [selectedTopic, setSelectedTopic] = useState<string>("");
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(1);
-  const LIMIT = 10;
 
-  // 2. Data Hooks
-  const { data: subjectsData = [] } = useSubjects();
-  const { data: topicsData = [] } = useTopics(selectedSubject);
-  const { data: statsData } = useQuestionStats();
+  const { 
+    data: subjectsData,
+    isError: isSubjectsError 
+  } = useSubjects();
+  
+  const { 
+    data: topicsData,
+    isError: isTopicsError 
+  } = useTopics(selectedSubject);
+  
+  const { 
+    data: statsData,
+    isError: isStatsError 
+  } = useQuestionStats();
 
-  const { data: questionsResponse, isLoading: isQuestionsLoading } =
-    useQuestions({
+  const { 
+    data: questionsResponse, 
+    isLoading: isQuestionsLoading,
+    isError: isQuestionsError 
+  } = useQuestions({
       subjectId: selectedSubject,
       topicId: selectedTopic,
-      difficultyLevel: selectedDifficulty,
+      difficultyLevel: selectedDifficulty as any,
       search: searchQuery,
       page,
-      limit: LIMIT,
+      limit,
     });
 
-  const questionsList = questionsResponse?.questions || [];
-  const pagination = questionsResponse?.pagination || {
+  const subjects = subjectsData?.data?.subjects || [];
+  const topics = topicsData?.data?.topics || [];
+  const questionsList = questionsResponse?.data?.questions || [];
+  const pagination = questionsResponse?.data?.pagination || {
     total: 0,
     totalPages: 1,
+    page: 1,
+  };
+  const stats = statsData?.data || {
+    total: 0,
+    active: 0,
+    byDifficulty: { EASY: 0, MEDIUM: 0, HARD: 0 }
   };
 
-  // 3. Mutation Hooks
   const createMutation = useCreateQuestion();
   const updateMutation = useUpdateQuestion();
   const deleteMutation = useDeleteQuestion();
   const bulkUploadMutation = useBulkUploadQuestions();
 
-  // 4. UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
@@ -101,11 +117,13 @@ export const Questions = () => {
     subjectId: "",
     topicId: "",
     questionText: "",
+    questionImageUrl: "",
+    explanationImageUrl: "",
     option1: "",
     option2: "",
     option3: "",
     option4: "",
-    correctOption: 1, // 1-based index as per backend validation
+    correctOption: 1,
     explanation: "",
     difficultyLevel: "MEDIUM" as "EASY" | "MEDIUM" | "HARD",
     isActive: true,
@@ -113,22 +131,22 @@ export const Questions = () => {
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
-  // Helper Lookups
   const getSubjectName = (item: any) => item.topic?.subject?.name || "Unknown";
   const getTopicName = (item: any) => item.topic?.name || "Unknown";
 
-  // Handlers
   const handleOpenModal = (question?: any) => {
     if (question) {
       setEditingQuestion(question);
       setFormData({
         subjectId: question.topic?.subject?.id || "",
         topicId: question.topicId,
-        questionText: question.questionText || question.text, // Handle potential mapping
+        questionText: question.questionText || question.text,
         option1: question.option1,
         option2: question.option2,
         option3: question.option3,
         option4: question.option4,
+        explanationImageUrl: question.explanationImageUrl || "",
+        questionImageUrl: question.questionImageUrl || "",
         correctOption: question.correctOption,
         explanation: question.explanation || "",
         difficultyLevel: question.difficultyLevel || question.difficulty,
@@ -145,6 +163,8 @@ export const Questions = () => {
         option3: "",
         option4: "",
         correctOption: 1,
+        explanationImageUrl: "",
+        questionImageUrl: "",
         explanation: "",
         difficultyLevel: "MEDIUM",
         isActive: true,
@@ -171,7 +191,6 @@ export const Questions = () => {
       return;
     }
 
-    // Prepare payload matching your API expectation
     const payload = {
       topicId: formData.topicId,
       questionText: formData.questionText,
@@ -183,7 +202,8 @@ export const Questions = () => {
       difficultyLevel: formData.difficultyLevel,
       explanation: formData.explanation,
       isActive: formData.isActive,
-      // questionImageUrl: ... (Add image upload logic later if needed)
+      explanationImageUrl: formData.explanationImageUrl || undefined,
+      questionImageUrl: formData.questionImageUrl || undefined,
     };
 
     try {
@@ -197,40 +217,72 @@ export const Questions = () => {
       }
       setIsModalOpen(false);
     } catch (error) {
-      console.error(error);
+      // Error already handled by hook
     }
   };
 
   const handleBulkUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!csvFile) {
-      toast.error("Please select a CSV file");
+
+    if (!csvFile || !bulkTopicId) {
+      toast.error("Topic and CSV file required");
       return;
     }
 
     const formData = new FormData();
     formData.append("file", csvFile);
+    formData.append("topicId", bulkTopicId);
+    if (bulkSubjectId) {
+      formData.append("subjectId", bulkSubjectId);
+    }
 
     try {
       await bulkUploadMutation.mutateAsync(formData);
       setIsBulkModalOpen(false);
       setCsvFile(null);
+      setBulkSubjectId("");
+      setBulkTopicId("");
     } catch (error) {
-      console.error(error);
+      // Error already handled by hook
     }
+  };
+
+  const downloadSampleCSV = () => {
+    const csv = `Serial Number,Question,Option A,Option B,Option C,Option D,Correct Answer,Explanation
+1,जीवों की मूलभूत...,कोशिका,ऊतक,अंग,अंगतंत्र,a,कोशिका जीवों की मूल इकाई है`;
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "questions_sample.csv";
+    link.click();
+
+    URL.revokeObjectURL(url);
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this question?")) {
+    if (!confirm("Are you sure you want to delete this question?")) {
+      return;
+    }
+
+    try {
       await deleteMutation.mutateAsync(id);
+    } catch (error) {
+      // Error already handled by hook
     }
   };
 
-  const handleToggleActive = (id: string, currentStatus: boolean) => {
-    updateMutation.mutate({
-      id,
-      data: { isActive: !currentStatus },
-    });
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      await updateMutation.mutateAsync({
+        id,
+        data: { isActive: !currentStatus },
+      });
+    } catch (error) {
+      // Error already handled by hook
+    }
   };
 
   const difficultyVariant = {
@@ -302,7 +354,7 @@ export const Questions = () => {
             disabled={deleteMutation.isPending}
             className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
           >
-            {deleteMutation.isPending && editingQuestion?.id === item.id ? (
+            {deleteMutation.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Trash2 className="w-4 h-4" />
@@ -313,24 +365,67 @@ export const Questions = () => {
     },
   ];
 
+  const MAX_IMAGE_MB = 5;
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+        reject(new Error("Image must be less than 5MB"));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleQuestionImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const base64 = await fileToBase64(file);
+      setFormData({ ...formData, questionImageUrl: base64 });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleExplanationImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const base64 = await fileToBase64(file);
+      setFormData({ ...formData, explanationImageUrl: base64 });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   return (
     <DashboardLayout
       title="Manage Questions"
       breadcrumbs={[{ label: "Questions" }]}
     >
-      {/* Stats Overview */}
-      {statsData && (
+      {!isStatsError && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-card border border-border p-4 rounded-lg">
             <p className="text-xs text-muted-foreground uppercase">
               Total Questions
             </p>
-            <p className="text-2xl font-bold mt-1">{statsData.total}</p>
+            <p className="text-2xl font-bold mt-1">{stats.total || 0}</p>
           </div>
           <div className="bg-card border border-border p-4 rounded-lg">
             <p className="text-xs text-muted-foreground uppercase">Active</p>
             <p className="text-2xl font-bold mt-1 text-success">
-              {statsData.active}
+              {stats.active || 0}
             </p>
           </div>
           <div className="bg-card border border-border p-4 rounded-lg">
@@ -338,19 +433,17 @@ export const Questions = () => {
               Easy / Med / Hard
             </p>
             <p className="text-sm font-medium mt-2">
-              {statsData.byDifficulty?.EASY || 0} /{" "}
-              {statsData.byDifficulty?.MEDIUM || 0} /{" "}
-              {statsData.byDifficulty?.HARD || 0}
+              {stats.byDifficulty?.EASY || 0} /{" "}
+              {stats.byDifficulty?.MEDIUM || 0} /{" "}
+              {stats.byDifficulty?.HARD || 0}
             </p>
           </div>
         </div>
       )}
 
-      {/* Top Section & Filters */}
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
@@ -362,38 +455,47 @@ export const Questions = () => {
               />
             </div>
 
-            {/* Subject Filter */}
-            <select
-              value={selectedSubject}
-              onChange={(e) => {
-                setSelectedSubject(e.target.value);
-                setSelectedTopic("");
-              }}
-              className="input-field w-40"
-            >
-              <option value="">All Subjects</option>
-              {subjectsData?.data?.subjects?.map((sub: any) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
-                </option>
-              ))}
-            </select>
+            {isSubjectsError ? (
+              <div className="p-2 bg-muted/30 rounded border border-border text-xs text-muted-foreground">
+                Unable to load subjects
+              </div>
+            ) : (
+              <select
+                value={selectedSubject}
+                onChange={(e) => {
+                  setSelectedSubject(e.target.value);
+                  setSelectedTopic("");
+                }}
+                className="input-field w-40"
+              >
+                <option value="">All Subjects</option>
+                {subjects.map((sub: any) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
-            {/* Topic Filter */}
-            <select
-              value={selectedTopic}
-              onChange={(e) => setSelectedTopic(e.target.value)}
-              className="input-field w-40"
-            >
-              <option value="">All Topics</option>
-              {topicsData?.data?.topics?.map((topic: any) => (
-                <option key={topic.id} value={topic.id}>
-                  {topic.name}
-                </option>
-              ))}
-            </select>
+            {isTopicsError ? (
+              <div className="p-2 bg-muted/30 rounded border border-border text-xs text-muted-foreground">
+                Unable to load topics
+              </div>
+            ) : (
+              <select
+                value={selectedTopic}
+                onChange={(e) => setSelectedTopic(e.target.value)}
+                className="input-field w-40"
+              >
+                <option value="">All Topics</option>
+                {topics.map((topic: any) => (
+                  <option key={topic.id} value={topic.id}>
+                    {topic.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
-            {/* Difficulty Filter */}
             <select
               value={selectedDifficulty}
               onChange={(e) => setSelectedDifficulty(e.target.value)}
@@ -410,6 +512,7 @@ export const Questions = () => {
             <button
               onClick={() => setIsBulkModalOpen(true)}
               className="btn-outline flex items-center gap-2"
+              disabled={isSubjectsError || isTopicsError}
             >
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">Bulk Upload</span>
@@ -417,6 +520,7 @@ export const Questions = () => {
             <button
               onClick={() => handleOpenModal()}
               className="btn-primary flex items-center gap-2"
+              disabled={isSubjectsError || isTopicsError}
             >
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Add Question</span>
@@ -425,49 +529,41 @@ export const Questions = () => {
         </div>
       </div>
 
-      {/* Questions Table */}
       {isQuestionsLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
         </div>
+      ) : isQuestionsError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+          <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Unable to load questions</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            There was a problem loading the questions. Please try again.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-outline"
+          >
+            Refresh Page
+          </button>
+        </div>
       ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={questionsList}
-            searchPlaceholder="Search questions..."
-            searchable={false} // We handled search manually above
-            emptyMessage="No questions found"
-          />
-
-          {/* Pagination Controls */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="btn-outline text-sm py-1 px-3 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-muted-foreground">
-                Page {page} of {pagination.totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setPage((p) => Math.min(pagination.totalPages, p + 1))
-                }
-                disabled={page === pagination.totalPages}
-                className="btn-outline text-sm py-1 px-3 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
+        <DataTable
+          columns={columns}
+          data={questionsList}
+          searchPlaceholder="Search questions..."
+          searchable={false}
+          emptyMessage="No questions found"
+          pagination={pagination}
+          onPageChange={setPage}
+          onLimitChange={(newLimit) => {
+            setLimit(newLimit);
+            setPage(1);
+          }}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
       )}
 
-      {/* Add/Edit Question Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -493,7 +589,7 @@ export const Questions = () => {
                 disabled={isSubmitting}
               >
                 <option value="">Select Subject</option>
-                {subjectsData?.data?.subjects?.map((sub: any) => (
+                {subjects.map((sub: any) => (
                   <option key={sub.id} value={sub.id}>
                     {sub.name}
                   </option>
@@ -513,9 +609,9 @@ export const Questions = () => {
                 disabled={!formData.subjectId || isSubmitting}
               >
                 <option value="">Select Topic</option>
-                {topicsData?.data?.topics
-                  ?.filter((t: any) => t.subjectId === formData.subjectId)
-                  ?.map((topic: any) => (
+                {topics
+                  .filter((t: any) => t.subjectId === formData.subjectId)
+                  .map((topic: any) => (
                     <option key={topic.id} value={topic.id}>
                       {topic.name}
                     </option>
@@ -539,7 +635,26 @@ export const Questions = () => {
             />
           </div>
 
-          {/* Options Grid */}
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Question Image (optional, max 5MB)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleQuestionImageUpload}
+              className="input-field"
+            />
+
+            {formData.questionImageUrl && (
+              <img
+                src={formData.questionImageUrl}
+                alt="Question Preview"
+                className="mt-2 max-h-40 rounded border"
+              />
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((num) => (
               <div key={num} className="relative">
@@ -598,6 +713,26 @@ export const Questions = () => {
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Explanation Image (optional, max 5MB)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleExplanationImageUpload}
+              className="input-field"
+            />
+
+            {formData.explanationImageUrl && (
+              <img
+                src={formData.explanationImageUrl}
+                alt="Explanation Preview"
+                className="mt-2 max-h-40 rounded border"
+              />
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -654,7 +789,6 @@ export const Questions = () => {
         </form>
       </Modal>
 
-      {/* Bulk Upload Modal */}
       <Modal
         isOpen={isBulkModalOpen}
         onClose={() => setIsBulkModalOpen(false)}
@@ -662,37 +796,82 @@ export const Questions = () => {
         size="lg"
       >
         <form onSubmit={handleBulkUpload} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Subject <span className="text-destructive">*</span>
+              </label>
+              <select
+                value={bulkSubjectId}
+                onChange={(e) => {
+                  setBulkSubjectId(e.target.value);
+                  setBulkTopicId("");
+                }}
+                className="input-field"
+                required
+              >
+                <option value="">Select Subject</option>
+                {subjects.map((sub: any) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Topic <span className="text-destructive">*</span>
+              </label>
+              <select
+                value={bulkTopicId}
+                onChange={(e) => setBulkTopicId(e.target.value)}
+                className="input-field"
+                disabled={!bulkSubjectId}
+                required
+              >
+                <option value="">Select Topic</option>
+                {topics
+                  .filter((t: any) => t.subjectId === bulkSubjectId)
+                  .map((topic: any) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
           <div className="bg-muted/50 rounded-lg p-4">
-            <h4 className="font-medium mb-2">Instructions</h4>
+            <h4 className="font-medium mb-2">CSV Rules</h4>
             <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-              <li>Download the sample CSV template below</li>
+              <li>No subjectId or topicId needed in CSV</li>
               <li>
-                Columns: topicId, questionText, option1, option2, option3,
-                option4, correctOption (1-4), difficultyLevel
+                correctOption can be <b>1–4</b> or <b>A–D</b>
               </li>
-              <li>Maximum 1000 rows per upload</li>
+              <li>Maximum 1000 questions per upload</li>
             </ul>
+
             <button
               type="button"
+              onClick={downloadSampleCSV}
               className="btn-outline mt-3 flex items-center gap-2 text-sm"
             >
               <Download className="w-4 h-4" />
-              Download Sample Template
+              Download Sample CSV
             </button>
           </div>
 
-          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer relative">
+          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center relative">
             <input
               type="file"
               accept=".csv"
               onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              className="absolute inset-0 opacity-0 cursor-pointer"
             />
-            <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium mb-1">
-              {csvFile
-                ? csvFile.name
-                : "Drop your CSV file here or click to browse"}
+            <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+            <p className="font-medium">
+              {csvFile ? csvFile.name : "Click or drop CSV file"}
             </p>
           </div>
 
@@ -707,7 +886,9 @@ export const Questions = () => {
             <button
               type="submit"
               className="flex-1 btn-primary flex items-center justify-center gap-2"
-              disabled={!csvFile || bulkUploadMutation.isPending}
+              disabled={
+                !csvFile || !bulkTopicId || bulkUploadMutation.isPending
+              }
             >
               {bulkUploadMutation.isPending && (
                 <Loader2 className="w-4 h-4 animate-spin" />
