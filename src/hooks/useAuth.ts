@@ -84,7 +84,7 @@ export const useLogin = () => {
       const { data, message } = responseBody;
 
       if (data.user && data.accessToken) {
-
+console.log("otp-not")
         toast.success("Welcome back!", { description: message });
 
         localStorage.setItem("user_info", JSON.stringify(data.user));
@@ -94,6 +94,7 @@ export const useLogin = () => {
         navigate("/dashboard");
       }
       else if (data.otpId && data.token) {
+        console.log("otp-verification")
 
         toast.success("OTP Sent!", { description: message });
 

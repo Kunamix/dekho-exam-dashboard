@@ -20,7 +20,7 @@ export interface Category {
   id: string;
   name: string;
   description: string; // Changed to string (not optional) based on component usage
-  image: string | null;
+  imageUrl: string | null;
   categorySubjects: CategorySubject[];
   testsCount: number;
   isActive: boolean;

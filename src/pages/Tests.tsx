@@ -15,29 +15,23 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-
 import {
   useTests,
   useCreateTest,
   useUpdateTest,
   useDeleteTest,
-  Test
+  Test,
 } from "@/hooks/useTest";
 import { useCategories } from "@/hooks/useCategory";
 import { useSubjects } from "@/hooks/useSubject";
 
 export const Tests = () => {
-  const { 
-    data: testsData, 
+  const {
+    data: testsData,
     isLoading: isTestsLoading,
-    isError: isTestsError 
+    isError: isTestsError,
   } = useTests();
-  
-  const { 
-    data: categoriesData,
-    isError: isCategoriesError 
-  } = useCategories();
-  
+  const { data: categoriesData, isError: isCategoriesError } = useCategories();
   const { data: subjectsData } = useSubjects();
 
   const createMutation = useCreateTest();
@@ -46,11 +40,9 @@ export const Tests = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<Test | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
-
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedType, setSelectedType] = useState<string>("");
-
+  const [errorMessage, setErrorMessage] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedType, setSelectedType] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
@@ -69,10 +61,8 @@ export const Tests = () => {
 
   const filteredTests = tests.filter((test) => {
     if (selectedCategory && test.categoryId !== selectedCategory) return false;
-    
     const testType = test.isPaid ? "Paid" : "Free";
     if (selectedType && testType !== selectedType) return false;
-    
     return true;
   });
 
@@ -82,15 +72,12 @@ export const Tests = () => {
     categories?.find((c: any) => c.id === id)?.name || "Unknown";
 
   const getSelectedCategory = () => {
-    return categories?.find(
-      (cat: any) => cat.id === formData.categoryId
-    );
+    return categories?.find((cat: any) => cat.id === formData.categoryId);
   };
 
   const calculateTotalQuestions = () => {
     const selectedCat = getSelectedCategory();
     if (!selectedCat?.categorySubjects) return 0;
-
     return selectedCat.categorySubjects.reduce(
       (sum: number, item: any) => sum + (item.questionsPerTest ?? 0),
       0
@@ -104,7 +91,9 @@ export const Tests = () => {
     return "An unexpected error occurred. Please try again.";
   };
 
-  const formatErrorForDisplay = (errorMsg: string): { title: string; details: string[] } => {
+  const formatErrorForDisplay = (
+    errorMsg: string
+  ): { title: string; details: string[] } => {
     if (errorMsg.includes("Insufficient unused questions")) {
       const lines = errorMsg.split("\n").filter((line) => line.trim());
       const title = "Insufficient Questions Available";
@@ -113,13 +102,25 @@ export const Tests = () => {
         .map((line) => line.trim());
       return { title, details };
     }
+
     if (errorMsg.includes("already exists")) {
-      return { title: "Duplicate Test Number", details: [errorMsg] };
+      return {
+        title: "Duplicate Test Number",
+        details: [errorMsg],
+      };
     }
+
     if (errorMsg.includes("required")) {
-      return { title: "Missing Required Fields", details: [errorMsg] };
+      return {
+        title: "Missing Required Fields",
+        details: [errorMsg],
+      };
     }
-    return { title: "Error Creating Test", details: [errorMsg] };
+
+    return {
+      title: "Error Creating Test",
+      details: [errorMsg],
+    };
   };
 
   const handleOpenModal = (test?: Test) => {
@@ -158,18 +159,23 @@ export const Tests = () => {
 
   const handleCategoryChange = (categoryId: string) => {
     setErrorMessage("");
-    const selectedCat = categories?.find(
-      (cat: any) => cat.id === categoryId
-    );
+    const selectedCat = categories?.find((cat: any) => cat.id === categoryId);
 
     if (selectedCat?.categorySubjects) {
       const total = selectedCat.categorySubjects.reduce(
         (sum: number, item: any) => sum + (item.questionsPerTest ?? 0),
         0
       );
-      setFormData((prev) => ({ ...prev, categoryId, totalQuestions: total }));
+      setFormData((prev) => ({
+        ...prev,
+        categoryId,
+        totalQuestions: total,
+      }));
     } else {
-      setFormData((prev) => ({ ...prev, categoryId }));
+      setFormData((prev) => ({
+        ...prev,
+        categoryId,
+      }));
     }
   };
 
@@ -179,6 +185,12 @@ export const Tests = () => {
 
     if (!formData.name.trim() || !formData.categoryId) {
       toast.error("Please fill all required fields");
+      return;
+    }
+
+    // Validate negative marks cannot be greater than positive marks
+    if (formData.negativeMarks > formData.positiveMarks) {
+      toast.error("Negative marks cannot be greater than positive marks");
       return;
     }
 
@@ -204,7 +216,6 @@ export const Tests = () => {
     if (!confirm("Are you sure you want to delete this test?")) {
       return;
     }
-
     try {
       await deleteMutation.mutateAsync(id);
     } catch (error) {
@@ -236,7 +247,7 @@ export const Tests = () => {
       render: (item: Test) => (
         <div className="flex items-center gap-1">
           <Clock className="w-4 h-4 text-muted-foreground" />
-          <span>{item.durationMinutes || item.duration} min</span>
+          {item.durationMinutes || item.duration} min
         </div>
       ),
     },
@@ -246,7 +257,7 @@ export const Tests = () => {
       render: (item: Test) => (
         <div className="flex items-center gap-1">
           <FileQuestion className="w-4 h-4 text-muted-foreground" />
-          <span>{item.totalQuestions}</span>
+          {item.totalQuestions}
         </div>
       ),
     },
@@ -254,16 +265,17 @@ export const Tests = () => {
       key: "marking",
       label: "Marking",
       render: (item: Test) => (
-        <span className="text-sm">
+        <div className="flex items-center gap-1">
+          <Award className="w-4 h-4 text-muted-foreground" />
           +{item.positiveMarks}, -{item.negativeMarks}
-        </span>
+        </div>
       ),
     },
     {
       key: "isPaid",
       label: "Type",
       render: (item: Test) => (
-        <Badge variant={!item.isPaid ? "success" : "primary"}>
+        <Badge variant={item.isPaid ? "default" : "secondary"}>
           {item.isPaid ? "Paid" : "Free"}
         </Badge>
       ),
@@ -282,7 +294,7 @@ export const Tests = () => {
       key: "actions",
       label: "Actions",
       render: (item: Test) => (
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <button
             onClick={() => handleOpenModal(item)}
             className="p-2 rounded-lg hover:bg-muted transition-colors"
@@ -308,73 +320,75 @@ export const Tests = () => {
   ];
 
   return (
-    <DashboardLayout title="Manage Tests" breadcrumbs={[{ label: "Tests" }]}>
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          {isCategoriesError ? (
-            <div className="p-2 bg-muted/30 rounded border border-border text-xs text-muted-foreground">
-              Unable to load categories
-            </div>
-          ) : (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Tests Management</h1>
+          <div className="flex gap-3">
+            {isCategoriesError ? (
+              <div className="text-sm text-destructive">
+                Unable to load categories
+              </div>
+            ) : (
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="input-field w-48"
+              >
+                <option value="">All Categories</option>
+                {categories?.map((cat: any) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="input-field w-48"
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="input-field w-32"
             >
-              <option value="">All Categories</option>
-              {categories?.map((cat: any) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
+              <option value="">All Types</option>
+              <option value="Free">Free</option>
+              <option value="Paid">Paid</option>
             </select>
-          )}
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="input-field w-32"
-          >
-            <option value="">All Types</option>
-            <option value="Free">Free</option>
-            <option value="Paid">Paid</option>
-          </select>
+            <button
+              onClick={() => handleOpenModal()}
+              className="btn-primary flex items-center gap-2"
+              disabled={isCategoriesError}
+            >
+              <Plus className="w-4 h-4" />
+              Create New Test
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="btn-primary flex items-center gap-2"
-          disabled={isCategoriesError}
-        >
-          <Plus className="w-4 h-4" />
-          Create New Test
-        </button>
-      </div>
 
-      {isTestsLoading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        </div>
-      ) : isTestsError ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-          <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Unable to load tests</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            There was a problem loading the tests. Please try again.
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="btn-outline"
-          >
-            Refresh Page
-          </button>
-        </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={filteredTests}
-          searchPlaceholder="Search tests..."
-          emptyMessage="No tests found"
-        />
-      )}
+        {isTestsLoading ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : isTestsError ? (
+          <div className="flex flex-col items-center justify-center p-12 space-y-4">
+            <AlertCircle className="w-12 h-12 text-destructive" />
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-2">
+                Unable to load tests
+              </h3>
+              <p className="text-muted-foreground">
+                There was a problem loading the tests. Please try again.
+              </p>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="btn-outline"
+            >
+              Refresh Page
+            </button>
+          </div>
+        ) : (
+          <DataTable columns={columns} data={filteredTests} />
+        )}
+      </div>
 
       <Modal
         isOpen={isModalOpen}
@@ -388,21 +402,19 @@ export const Tests = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {errorMessage && (
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-              <div className="flex items-start gap-3">
+              <div className="flex gap-3">
                 <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <h4 className="font-semibold text-destructive mb-2">
                     {formatErrorForDisplay(errorMessage).title}
                   </h4>
-                  <div className="space-y-1 text-sm text-destructive/90">
-                    {formatErrorForDisplay(errorMessage).details.map(
-                      (detail, idx) => (
-                        <p key={idx} className="leading-relaxed">
-                          {detail}
-                        </p>
-                      )
-                    )}
-                  </div>
+                  {formatErrorForDisplay(errorMessage).details.map(
+                    (detail, idx) => (
+                      <p key={idx} className="text-sm text-destructive/90">
+                        {detail}
+                      </p>
+                    )
+                  )}
                 </div>
               </div>
             </div>
@@ -410,7 +422,7 @@ export const Tests = () => {
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              Test Name <span className="text-destructive">*</span>
+              Test Name *
             </label>
             <input
               type="text"
@@ -426,7 +438,7 @@ export const Tests = () => {
 
           <div>
             <label className="block text-sm font-medium mb-1">
-              Category <span className="text-destructive">*</span>
+              Category *
             </label>
             <select
               value={formData.categoryId}
@@ -443,35 +455,33 @@ export const Tests = () => {
             </select>
           </div>
 
-          {formData.categoryId && getSelectedCategory()?.categorySubjects && (
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <Award className="w-4 h-4 text-primary" />
-                Question Distribution for {getCategoryName(formData.categoryId)}
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
+          {formData.categoryId &&
+            getSelectedCategory()?.categorySubjects && (
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <h4 className="font-medium text-sm">
+                  Question Distribution for {getCategoryName(formData.categoryId)}
+                </h4>
                 {getSelectedCategory()?.categorySubjects?.map((item: any) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between bg-card p-3 rounded-lg"
+                    className="flex justify-between text-sm"
                   >
-                    <span className="text-sm">{item?.subject?.name}</span>
-                    <span className="text-sm font-medium text-primary">
+                    <span className="text-muted-foreground">
+                      {item?.subject?.name}
+                    </span>
+                    <span className="font-medium">
                       {item?.questionsPerTest} questions
                     </span>
                   </div>
                 ))}
-              </div>
-              <div className="mt-3 pt-3 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Total Questions:</span>
-                  <span className="text-sm font-bold text-primary">
+                <div className="flex justify-between text-sm pt-2 border-t border-border">
+                  <span className="font-medium">Total Questions:</span>
+                  <span className="font-semibold text-primary">
                     {calculateTotalQuestions()} questions
                   </span>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           <div>
             <label className="block text-sm font-medium mb-1">
@@ -507,6 +517,7 @@ export const Tests = () => {
                 disabled={isSubmitting}
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Total Questions
@@ -526,18 +537,19 @@ export const Tests = () => {
                 readOnly
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Positive Marks
               </label>
               <input
                 type="number"
-                step="0.25"
+                step="0.01"
                 value={formData.positiveMarks}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    positiveMarks: parseFloat(e.target.value) || 0,
+                    positiveMarks: e.target.value === '' ? 0 : parseFloat(e.target.value),
                   })
                 }
                 className="input-field"
@@ -545,24 +557,35 @@ export const Tests = () => {
                 disabled={isSubmitting}
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Negative Marks
               </label>
               <input
                 type="number"
-                step="0.25"
+                step="0.01"
                 value={formData.negativeMarks}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    negativeMarks: parseFloat(e.target.value) || 0,
+                    negativeMarks: e.target.value === '' ? 0 : parseFloat(e.target.value),
                   })
                 }
-                className="input-field"
+                className={`input-field ${
+                  formData.negativeMarks > formData.positiveMarks
+                    ? 'border-destructive focus:ring-destructive'
+                    : ''
+                }`}
                 min={0}
+                max={formData.positiveMarks}
                 disabled={isSubmitting}
               />
+              {formData.negativeMarks > formData.positiveMarks && (
+                <p className="text-xs text-destructive mt-1">
+                  Cannot be greater than positive marks
+                </p>
+              )}
             </div>
           </div>
 
@@ -577,7 +600,9 @@ export const Tests = () => {
                     type="radio"
                     name="type"
                     checked={!formData.isPaid}
-                    onChange={() => setFormData({ ...formData, isPaid: false })}
+                    onChange={() =>
+                      setFormData({ ...formData, isPaid: false })
+                    }
                     className="w-4 h-4 text-primary"
                     disabled={isSubmitting}
                   />
@@ -588,7 +613,9 @@ export const Tests = () => {
                     type="radio"
                     name="type"
                     checked={formData.isPaid}
-                    onChange={() => setFormData({ ...formData, isPaid: true })}
+                    onChange={() =>
+                      setFormData({ ...formData, isPaid: true })
+                    }
                     className="w-4 h-4 text-primary"
                     disabled={isSubmitting}
                   />
@@ -596,6 +623,7 @@ export const Tests = () => {
                 </label>
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Test Number

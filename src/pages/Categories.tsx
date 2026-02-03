@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Modal } from "@/components/common/Modal";
 import { Toggle } from "@/components/common/Toggle";
@@ -14,6 +14,8 @@ import {
   Link2,
   X,
   AlertCircle,
+  Upload,
+  Image as ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,9 +58,14 @@ export const Categories = () => {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    imageUrl: "",
     displayOrder: 1,
     isActive: true,
   });
+  
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectAssignment[]>([]);
 
@@ -74,23 +81,66 @@ export const Categories = () => {
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
   const isAssigning = assignSubjectsMutation.isPending;
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please select a valid image file");
+      return;
+    }
+
+    // Check file size (2MB = 2 * 1024 * 1024 bytes)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error("Image size must be less than 2MB");
+      return;
+    }
+
+    setImageFile(file);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview("");
+    setFormData({ ...formData, imageUrl: "" });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleOpenModal = (category?: Category) => {
     if (category) {
       setEditingCategory(category);
       setFormData({
         name: category.name,
         description: category.description || "",
+        imageUrl: category.imageUrl || "",
         displayOrder: category.displayOrder || 1,
         isActive: category.isActive,
       });
+      setImagePreview(category.imageUrl || "");
+      setImageFile(null);
     } else {
       setEditingCategory(null);
       setFormData({
         name: "",
         description: "",
+        imageUrl: "",
         displayOrder: categories.length + 1,
         isActive: true,
       });
+      setImagePreview("");
+      setImageFile(null);
     }
     setIsModalOpen(true);
   };
@@ -98,6 +148,11 @@ export const Categories = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingCategory(null);
+    setImageFile(null);
+    setImagePreview("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleOpenAssignModal = (category: Category) => {
@@ -144,6 +199,25 @@ export const Categories = () => {
     setSubjectAssignments(updated);
   };
 
+  const uploadImage = async (file: File): Promise<string> => {
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+
+    // Upload to your backend
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload image');
+    }
+
+    const data = await response.json();
+    return data.imageUrl;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -153,13 +227,25 @@ export const Categories = () => {
     }
 
     try {
+      let imageUrl = formData.imageUrl;
+
+      // Upload new image if selected
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
+      const submitData = {
+        ...formData,
+        imageUrl,
+      };
+
       if (editingCategory) {
         await updateMutation.mutateAsync({
           id: editingCategory.id,
-          data: formData,
+          data: submitData,
         });
       } else {
-        await createMutation.mutateAsync(formData);
+        await createMutation.mutateAsync(submitData);
       }
       handleCloseModal();
     } catch (error) {
@@ -274,63 +360,80 @@ export const Categories = () => {
             {filteredCategories.map((category) => (
               <div
                 key={category.id}
-                className="dashboard-card p-6 hover:shadow-medium transition-shadow group"
+                className="dashboard-card overflow-hidden hover:shadow-medium transition-shadow group"
               >
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="font-semibold text-lg">{category.name}</h3>
-                  <Toggle
-                    checked={category.isActive}
-                    onChange={() =>
-                      handleToggleActive(category.id, category.isActive)
-                    }
-                  />
-                </div>
-
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                  {category.description}
-                </p>
-
-                <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <BookOpen className="w-4 h-4" />
-                    <span>
-                      {category?.categorySubjects?.length || 0} subjects
-                    </span>
+                {/* Category Image */}
+                {category.imageUrl ? (
+                  <div className="w-full h-48 overflow-hidden bg-muted">
+                    <img
+                      src={category.imageUrl}
+                      alt={category.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <ClipboardList className="w-4 h-4" />
-                    <span>{category._count?.tests || 0} tests</span>
+                ) : (
+                  <div className="w-full h-48 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                    <ImageIcon className="w-16 h-16 text-muted-foreground/30" />
                   </div>
-                </div>
+                )}
 
-                <div className="flex flex-col gap-2 pt-4 border-t border-border">
-                  <div className="flex items-center gap-2">
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="font-semibold text-lg">{category.name}</h3>
+                    <Toggle
+                      checked={category.isActive}
+                      onChange={() =>
+                        handleToggleActive(category.id, category.isActive)
+                      }
+                    />
+                  </div>
+
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                    {category.description}
+                  </p>
+
+                  <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <BookOpen className="w-4 h-4" />
+                      <span>
+                        {category?.categorySubjects?.length || 0} subjects
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <ClipboardList className="w-4 h-4" />
+                      <span>{category._count?.tests || 0} tests</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-4 border-t border-border">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenModal(category)}
+                        className="flex-1 btn-outline text-sm py-2"
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(category.id)}
+                        disabled={deleteMutation.isPending}
+                        className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
+                      >
+                        {deleteMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                     <button
-                      onClick={() => handleOpenModal(category)}
-                      className="flex-1 btn-outline text-sm py-2"
+                      onClick={() => handleOpenAssignModal(category)}
+                      className="btn-primary text-sm py-2 w-full"
                     >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(category.id)}
-                      disabled={deleteMutation.isPending}
-                      className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
-                    >
-                      {deleteMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
+                      <Link2 className="w-4 h-4 mr-2" />
+                      Assign Subjects
                     </button>
                   </div>
-                  <button
-                    onClick={() => handleOpenAssignModal(category)}
-                    className="btn-primary text-sm py-2 w-full"
-                  >
-                    <Link2 className="w-4 h-4 mr-2" />
-                    Assign Subjects
-                  </button>
                 </div>
               </div>
             ))}
@@ -366,6 +469,53 @@ export const Categories = () => {
         title={editingCategory ? "Edit Category" : "Add New Category"}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Image Upload Section */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Category Image
+            </label>
+            
+            {imagePreview ? (
+              <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute top-2 right-2 p-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
+                  disabled={isSubmitting}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+              >
+                <Upload className="w-12 h-12 text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground mb-1">
+                  Click to upload image
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Max size: 2MB (JPG, PNG, GIF)
+                </p>
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+              disabled={isSubmitting}
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium mb-1">
               Category Name <span className="text-destructive">*</span>

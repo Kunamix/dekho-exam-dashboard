@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DataTable } from "@/components/common/DataTable";
 import { Modal } from "@/components/common/Modal";
@@ -14,6 +14,8 @@ import {
   Loader2,
   Search,
   AlertCircle,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -113,6 +115,15 @@ export const Questions = () => {
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
 
+  // Image state
+  const [questionImageFile, setQuestionImageFile] = useState<File | null>(null);
+  const [questionImagePreview, setQuestionImagePreview] = useState<string>("");
+  const [explanationImageFile, setExplanationImageFile] = useState<File | null>(null);
+  const [explanationImagePreview, setExplanationImagePreview] = useState<string>("");
+  
+  const questionImageInputRef = useRef<HTMLInputElement>(null);
+  const explanationImageInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     subjectId: "",
     topicId: "",
@@ -134,6 +145,78 @@ export const Questions = () => {
   const getSubjectName = (item: any) => item.topic?.subject?.name || "Unknown";
   const getTopicName = (item: any) => item.topic?.name || "Unknown";
 
+  const handleImageSelect = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'question' | 'explanation'
+  ) => {
+    const file = e.target.files?.[0];
+    
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please select a valid image file");
+      return;
+    }
+
+    // Check file size (2MB = 2 * 1024 * 1024 bytes)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error("Image size must be less than 2MB");
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const preview = reader.result as string;
+      
+      if (type === 'question') {
+        setQuestionImageFile(file);
+        setQuestionImagePreview(preview);
+      } else {
+        setExplanationImageFile(file);
+        setExplanationImagePreview(preview);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = (type: 'question' | 'explanation') => {
+    if (type === 'question') {
+      setQuestionImageFile(null);
+      setQuestionImagePreview("");
+      setFormData({ ...formData, questionImageUrl: "" });
+      if (questionImageInputRef.current) {
+        questionImageInputRef.current.value = "";
+      }
+    } else {
+      setExplanationImageFile(null);
+      setExplanationImagePreview("");
+      setFormData({ ...formData, explanationImageUrl: "" });
+      if (explanationImageInputRef.current) {
+        explanationImageInputRef.current.value = "";
+      }
+    }
+  };
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload image');
+    }
+
+    const data = await response.json();
+    return data.imageUrl;
+  };
+
   const handleOpenModal = (question?: any) => {
     if (question) {
       setEditingQuestion(question);
@@ -152,6 +235,12 @@ export const Questions = () => {
         difficultyLevel: question.difficultyLevel || question.difficulty,
         isActive: question.isActive,
       });
+      
+      // Set existing image previews
+      setQuestionImagePreview(question.questionImageUrl || "");
+      setExplanationImagePreview(question.explanationImageUrl || "");
+      setQuestionImageFile(null);
+      setExplanationImageFile(null);
     } else {
       setEditingQuestion(null);
       setFormData({
@@ -169,8 +258,28 @@ export const Questions = () => {
         difficultyLevel: "MEDIUM",
         isActive: true,
       });
+      
+      // Clear image states
+      setQuestionImageFile(null);
+      setQuestionImagePreview("");
+      setExplanationImageFile(null);
+      setExplanationImagePreview("");
     }
     setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setQuestionImageFile(null);
+    setQuestionImagePreview("");
+    setExplanationImageFile(null);
+    setExplanationImagePreview("");
+    if (questionImageInputRef.current) {
+      questionImageInputRef.current.value = "";
+    }
+    if (explanationImageInputRef.current) {
+      explanationImageInputRef.current.value = "";
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -191,22 +300,35 @@ export const Questions = () => {
       return;
     }
 
-    const payload = {
-      topicId: formData.topicId,
-      questionText: formData.questionText,
-      option1: formData.option1,
-      option2: formData.option2,
-      option3: formData.option3,
-      option4: formData.option4,
-      correctOption: Number(formData.correctOption),
-      difficultyLevel: formData.difficultyLevel,
-      explanation: formData.explanation,
-      isActive: formData.isActive,
-      explanationImageUrl: formData.explanationImageUrl || undefined,
-      questionImageUrl: formData.questionImageUrl || undefined,
-    };
-
     try {
+      let questionImageUrl = formData.questionImageUrl;
+      let explanationImageUrl = formData.explanationImageUrl;
+
+      // Upload new question image if selected
+      if (questionImageFile) {
+        questionImageUrl = await uploadImage(questionImageFile);
+      }
+
+      // Upload new explanation image if selected
+      if (explanationImageFile) {
+        explanationImageUrl = await uploadImage(explanationImageFile);
+      }
+
+      const payload = {
+        topicId: formData.topicId,
+        questionText: formData.questionText,
+        option1: formData.option1,
+        option2: formData.option2,
+        option3: formData.option3,
+        option4: formData.option4,
+        correctOption: Number(formData.correctOption),
+        difficultyLevel: formData.difficultyLevel,
+        explanation: formData.explanation,
+        isActive: formData.isActive,
+        explanationImageUrl: explanationImageUrl || undefined,
+        questionImageUrl: questionImageUrl || undefined,
+      };
+
       if (editingQuestion) {
         await updateMutation.mutateAsync({
           id: editingQuestion.id,
@@ -215,7 +337,7 @@ export const Questions = () => {
       } else {
         await createMutation.mutateAsync(payload);
       }
-      setIsModalOpen(false);
+      handleCloseModal();
     } catch (error) {
       // Error already handled by hook
     }
@@ -296,12 +418,17 @@ export const Questions = () => {
       key: "questionText",
       label: "Question",
       render: (item: any) => (
-        <span
-          className="line-clamp-2 max-w-md text-sm"
-          title={item.questionText}
-        >
-          {item.questionText}
-        </span>
+        <div className="flex items-start gap-2">
+          {item.questionImageUrl && (
+            <ImageIcon className="w-4 h-4 text-primary flex-shrink-0 mt-1" />
+          )}
+          <span
+            className="line-clamp-2 max-w-md text-sm"
+            title={item.questionText}
+          >
+            {item.questionText}
+          </span>
+        </div>
       ),
     },
     {
@@ -364,50 +491,6 @@ export const Questions = () => {
       ),
     },
   ];
-
-  const MAX_IMAGE_MB = 5;
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
-        reject(new Error("Image must be less than 5MB"));
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleQuestionImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const base64 = await fileToBase64(file);
-      setFormData({ ...formData, questionImageUrl: base64 });
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleExplanationImageUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const base64 = await fileToBase64(file);
-      setFormData({ ...formData, explanationImageUrl: base64 });
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
 
   return (
     <DashboardLayout
@@ -566,7 +649,7 @@ export const Questions = () => {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseModal}
         title={editingQuestion ? "Edit Question" : "Add New Question"}
         size="xl"
       >
@@ -635,24 +718,51 @@ export const Questions = () => {
             />
           </div>
 
+          {/* Question Image Upload */}
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Question Image (optional, max 5MB)
+            <label className="block text-sm font-medium mb-2">
+              Question Image (optional, max 2MB)
             </label>
+            
+            {questionImagePreview ? (
+              <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
+                <img
+                  src={questionImagePreview}
+                  alt="Question Preview"
+                  className="w-full h-full object-contain bg-muted"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveImage('question')}
+                  className="absolute top-2 right-2 p-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
+                  disabled={isSubmitting}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => questionImageInputRef.current?.click()}
+                className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+              >
+                <Upload className="w-12 h-12 text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground mb-1">
+                  Click to upload question image
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Max size: 2MB (JPG, PNG, GIF)
+                </p>
+              </div>
+            )}
+
             <input
+              ref={questionImageInputRef}
               type="file"
               accept="image/*"
-              onChange={handleQuestionImageUpload}
-              className="input-field"
+              onChange={(e) => handleImageSelect(e, 'question')}
+              className="hidden"
+              disabled={isSubmitting}
             />
-
-            {formData.questionImageUrl && (
-              <img
-                src={formData.questionImageUrl}
-                alt="Question Preview"
-                className="mt-2 max-h-40 rounded border"
-              />
-            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -713,24 +823,51 @@ export const Questions = () => {
             />
           </div>
 
+          {/* Explanation Image Upload */}
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Explanation Image (optional, max 5MB)
+            <label className="block text-sm font-medium mb-2">
+              Explanation Image (optional, max 2MB)
             </label>
+            
+            {explanationImagePreview ? (
+              <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
+                <img
+                  src={explanationImagePreview}
+                  alt="Explanation Preview"
+                  className="w-full h-full object-contain bg-muted"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveImage('explanation')}
+                  className="absolute top-2 right-2 p-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
+                  disabled={isSubmitting}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => explanationImageInputRef.current?.click()}
+                className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+              >
+                <Upload className="w-12 h-12 text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground mb-1">
+                  Click to upload explanation image
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Max size: 2MB (JPG, PNG, GIF)
+                </p>
+              </div>
+            )}
+
             <input
+              ref={explanationImageInputRef}
               type="file"
               accept="image/*"
-              onChange={handleExplanationImageUpload}
-              className="input-field"
+              onChange={(e) => handleImageSelect(e, 'explanation')}
+              className="hidden"
+              disabled={isSubmitting}
             />
-
-            {formData.explanationImageUrl && (
-              <img
-                src={formData.explanationImageUrl}
-                alt="Explanation Preview"
-                className="mt-2 max-h-40 rounded border"
-              />
-            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -771,7 +908,7 @@ export const Questions = () => {
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={() => setIsModalOpen(false)}
+              onClick={handleCloseModal}
               className="flex-1 btn-outline"
               disabled={isSubmitting}
             >
