@@ -425,15 +425,16 @@ export const Subscriptions = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold mb-1.5">Duration (Days)</label>
-              <input
-                type="number"
+              <label className="block text-sm font-semibold mb-1.5">Duration</label>
+              <select
                 value={formData.durationDays}
                 onChange={(e) => setFormData({ ...formData, durationDays: Number(e.target.value) })}
                 className="input-field"
-                min={1}
                 required
-              />
+              >
+                <option value={180}>Half-Yearly</option>
+                <option value={365}>Yearly</option>
+              </select>
             </div>
           </div>
 

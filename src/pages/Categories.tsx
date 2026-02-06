@@ -89,13 +89,19 @@ export const Categories = () => {
     // Check file type
     if (!file.type.startsWith('image/')) {
       toast.error("Please select a valid image file");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       return;
     }
 
     // Check file size (2MB = 2 * 1024 * 1024 bytes)
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error("Image size must be less than 2MB");
+      toast.error("Image size must be less than 2MB. Please choose a smaller image.");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       return;
     }
 
@@ -200,22 +206,33 @@ export const Categories = () => {
   };
 
   const uploadImage = async (file: File): Promise<string> => {
-    // Create FormData
-    const formData = new FormData();
-    formData.append('image', file);
+    try {
+      // Create FormData
+      const formData = new FormData();
+      formData.append('image', file);
 
-    // Upload to your backend
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
+      // Upload to your backend
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to upload image');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to upload image');
+      }
+
+      const data = await response.json();
+      
+      if (!data.imageUrl) {
+        throw new Error('Image URL not received from server');
+      }
+      
+      return data.imageUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    return data.imageUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -226,17 +243,37 @@ export const Categories = () => {
       return;
     }
 
+    // Validate image file size again before submit
+    if (imageFile) {
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      if (imageFile.size > maxSize) {
+        toast.error("Image size must be less than 2MB. Please choose a smaller image.");
+        return;
+      }
+    }
+
     try {
       let imageUrl = formData.imageUrl;
 
       // Upload new image if selected
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+        toast.loading("Uploading image...", { id: 'image-upload' });
+        try {
+          imageUrl = await uploadImage(imageFile);
+          toast.dismiss('image-upload');
+        } catch (uploadError: any) {
+          toast.dismiss('image-upload');
+          toast.error(uploadError.message || "Failed to upload image. Please try again.");
+          return;
+        }
       }
 
       const submitData = {
-        ...formData,
+        name: formData.name,
+        description: formData.description,
         imageUrl,
+        displayOrder: formData.displayOrder,
+        isActive: formData.isActive,
       };
 
       if (editingCategory) {
@@ -248,8 +285,9 @@ export const Categories = () => {
         await createMutation.mutateAsync(submitData);
       }
       handleCloseModal();
-    } catch (error) {
-      // Error already handled by hook
+    } catch (error: any) {
+      console.error('Category submission error:', error);
+      toast.error(error.message || "Failed to save category. Please try again.");
     }
   };
 
@@ -493,7 +531,7 @@ export const Categories = () => {
               </div>
             ) : (
               <div
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isSubmitting && fileInputRef.current?.click()}
                 className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
               >
                 <Upload className="w-12 h-12 text-muted-foreground/50 mb-2" />
@@ -501,7 +539,7 @@ export const Categories = () => {
                   Click to upload image
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Max size: 2MB (JPG, PNG, GIF)
+                  PNG, JPG, GIF (Max: 2MB)
                 </p>
               </div>
             )}
@@ -514,6 +552,10 @@ export const Categories = () => {
               className="hidden"
               disabled={isSubmitting}
             />
+            
+            <p className="text-xs text-muted-foreground mt-2">
+              ⚠️ Image must be less than 2MB in size
+            </p>
           </div>
 
           <div>

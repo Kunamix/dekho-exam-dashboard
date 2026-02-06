@@ -156,13 +156,23 @@ export const Questions = () => {
     // Check file type
     if (!file.type.startsWith('image/')) {
       toast.error("Please select a valid image file");
+      if (type === 'question' && questionImageInputRef.current) {
+        questionImageInputRef.current.value = "";
+      } else if (type === 'explanation' && explanationImageInputRef.current) {
+        explanationImageInputRef.current.value = "";
+      }
       return;
     }
 
     // Check file size (2MB = 2 * 1024 * 1024 bytes)
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error("Image size must be less than 2MB");
+      toast.error("Image size must be less than 2MB. Please choose a smaller image.");
+      if (type === 'question' && questionImageInputRef.current) {
+        questionImageInputRef.current.value = "";
+      } else if (type === 'explanation' && explanationImageInputRef.current) {
+        explanationImageInputRef.current.value = "";
+      }
       return;
     }
 
@@ -201,20 +211,33 @@ export const Questions = () => {
   };
 
   const uploadImage = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('image', file);
+    try {
+      // Create FormData
+      const formData = new FormData();
+      formData.append('image', file);
 
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
+      // Upload to your backend
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to upload image');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to upload image');
+      }
+
+      const data = await response.json();
+      
+      if (!data.imageUrl) {
+        throw new Error('Image URL not received from server');
+      }
+      
+      return data.imageUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    return data.imageUrl;
   };
 
   const handleOpenModal = (question?: any) => {
@@ -300,18 +323,51 @@ export const Questions = () => {
       return;
     }
 
+    // Validate image file sizes again before submit
+    if (questionImageFile) {
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      if (questionImageFile.size > maxSize) {
+        toast.error("Question image size must be less than 2MB. Please choose a smaller image.");
+        return;
+      }
+    }
+
+    if (explanationImageFile) {
+      const maxSize = 2 * 1024 * 1024; // 2MB
+      if (explanationImageFile.size > maxSize) {
+        toast.error("Explanation image size must be less than 2MB. Please choose a smaller image.");
+        return;
+      }
+    }
+
     try {
       let questionImageUrl = formData.questionImageUrl;
       let explanationImageUrl = formData.explanationImageUrl;
 
       // Upload new question image if selected
       if (questionImageFile) {
-        questionImageUrl = await uploadImage(questionImageFile);
+        toast.loading("Uploading question image...", { id: 'question-image-upload' });
+        try {
+          questionImageUrl = await uploadImage(questionImageFile);
+          toast.dismiss('question-image-upload');
+        } catch (uploadError: any) {
+          toast.dismiss('question-image-upload');
+          toast.error(uploadError.message || "Failed to upload question image. Please try again.");
+          return;
+        }
       }
 
       // Upload new explanation image if selected
       if (explanationImageFile) {
-        explanationImageUrl = await uploadImage(explanationImageFile);
+        toast.loading("Uploading explanation image...", { id: 'explanation-image-upload' });
+        try {
+          explanationImageUrl = await uploadImage(explanationImageFile);
+          toast.dismiss('explanation-image-upload');
+        } catch (uploadError: any) {
+          toast.dismiss('explanation-image-upload');
+          toast.error(uploadError.message || "Failed to upload explanation image. Please try again.");
+          return;
+        }
       }
 
       const payload = {
@@ -338,8 +394,9 @@ export const Questions = () => {
         await createMutation.mutateAsync(payload);
       }
       handleCloseModal();
-    } catch (error) {
-      // Error already handled by hook
+    } catch (error: any) {
+      console.error('Question submission error:', error);
+      toast.error(error.message || "Failed to save question. Please try again.");
     }
   };
 
@@ -721,7 +778,7 @@ export const Questions = () => {
           {/* Question Image Upload */}
           <div>
             <label className="block text-sm font-medium mb-2">
-              Question Image (optional, max 2MB)
+              Question Image (optional)
             </label>
             
             {questionImagePreview ? (
@@ -742,7 +799,7 @@ export const Questions = () => {
               </div>
             ) : (
               <div
-                onClick={() => questionImageInputRef.current?.click()}
+                onClick={() => !isSubmitting && questionImageInputRef.current?.click()}
                 className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
               >
                 <Upload className="w-12 h-12 text-muted-foreground/50 mb-2" />
@@ -750,7 +807,7 @@ export const Questions = () => {
                   Click to upload question image
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Max size: 2MB (JPG, PNG, GIF)
+                  PNG, JPG, GIF (Max: 2MB)
                 </p>
               </div>
             )}
@@ -763,6 +820,10 @@ export const Questions = () => {
               className="hidden"
               disabled={isSubmitting}
             />
+            
+            <p className="text-xs text-muted-foreground mt-2">
+              ⚠️ Image must be less than 2MB in size
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -826,7 +887,7 @@ export const Questions = () => {
           {/* Explanation Image Upload */}
           <div>
             <label className="block text-sm font-medium mb-2">
-              Explanation Image (optional, max 2MB)
+              Explanation Image (optional)
             </label>
             
             {explanationImagePreview ? (
@@ -847,7 +908,7 @@ export const Questions = () => {
               </div>
             ) : (
               <div
-                onClick={() => explanationImageInputRef.current?.click()}
+                onClick={() => !isSubmitting && explanationImageInputRef.current?.click()}
                 className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
               >
                 <Upload className="w-12 h-12 text-muted-foreground/50 mb-2" />
@@ -855,7 +916,7 @@ export const Questions = () => {
                   Click to upload explanation image
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Max size: 2MB (JPG, PNG, GIF)
+                  PNG, JPG, GIF (Max: 2MB)
                 </p>
               </div>
             )}
@@ -868,6 +929,10 @@ export const Questions = () => {
               className="hidden"
               disabled={isSubmitting}
             />
+            
+            <p className="text-xs text-muted-foreground mt-2">
+              ⚠️ Image must be less than 2MB in size
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

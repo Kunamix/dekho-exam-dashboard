@@ -98,7 +98,7 @@ export const useCreateQuestion = () => {
 
   return useMutation({
     mutationFn: async (payload: Partial<Question>) => {
-      const { data } = await api.post("/questions", payload);
+      const { data } = await api.post("/questions/create", payload);
       return data; // ✅ Handle both nested and flat responses
     },
     onSuccess: () => {
