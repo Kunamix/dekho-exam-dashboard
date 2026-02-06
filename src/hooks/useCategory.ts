@@ -158,7 +158,7 @@ export const useAssignSubjectsToCategory = () => {
       categoryId: string;
       subjects: SubjectAssignment[]; // Updated type to match component
     }) => {
-      const { data } = await api.post(
+      const { data } = await api.put(
         `/categories/${categoryId}/assign-subjects`,
         { subjects }
       );
