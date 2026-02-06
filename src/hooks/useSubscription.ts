@@ -86,7 +86,7 @@ export const useCreateSubscriptionPlan = () => {
 
   return useMutation({
     mutationFn: async (payload: Partial<SubscriptionPlan>) => {
-      const { data } = await api.post("/subscriptions/plans", payload);
+      const { data } = await api.post("/subscriptions/plans/create", payload);
       return data;
     },
     onSuccess: () => {
