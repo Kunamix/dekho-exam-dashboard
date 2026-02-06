@@ -385,7 +385,7 @@ export const Topics = () => {
             />
           </div>
 
-          <div>
+          {/* <div>
             <label className="block text-sm font-medium mb-1">
               Study Content
             </label>
@@ -414,7 +414,7 @@ export const Topics = () => {
               placeholder="https://youtube.com/watch?v=..."
               disabled={isSubmitting}
             />
-          </div>
+          </div> */}
 
           <div>
             <label className="block text-sm font-medium mb-1">

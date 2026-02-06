@@ -210,36 +210,6 @@ export const Questions = () => {
     }
   };
 
-  const uploadImage = async (file: File): Promise<string> => {
-    try {
-      // Create FormData
-      const formData = new FormData();
-      formData.append('image', file);
-
-      // Upload to your backend
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to upload image');
-      }
-
-      const data = await response.json();
-      
-      if (!data.imageUrl) {
-        throw new Error('Image URL not received from server');
-      }
-      
-      return data.imageUrl;
-    } catch (error) {
-      console.error('Image upload error:', error);
-      throw error;
-    }
-  };
-
   const handleOpenModal = (question?: any) => {
     if (question) {
       setEditingQuestion(question);
@@ -341,57 +311,42 @@ export const Questions = () => {
     }
 
     try {
-      let questionImageUrl = formData.questionImageUrl;
-      let explanationImageUrl = formData.explanationImageUrl;
+      // Create FormData to send all data including images
+      const submitFormData = new FormData();
+      
+      // Append text fields
+      submitFormData.append('topicId', formData.topicId);
+      submitFormData.append('questionText', formData.questionText);
+      submitFormData.append('option1', formData.option1);
+      submitFormData.append('option2', formData.option2);
+      submitFormData.append('option3', formData.option3);
+      submitFormData.append('option4', formData.option4);
+      submitFormData.append('correctOption', String(formData.correctOption));
+      submitFormData.append('difficultyLevel', formData.difficultyLevel);
+      submitFormData.append('explanation', formData.explanation);
+      submitFormData.append('isActive', String(formData.isActive));
 
-      // Upload new question image if selected
+      // Append images with their specific field names
       if (questionImageFile) {
-        toast.loading("Uploading question image...", { id: 'question-image-upload' });
-        try {
-          questionImageUrl = await uploadImage(questionImageFile);
-          toast.dismiss('question-image-upload');
-        } catch (uploadError: any) {
-          toast.dismiss('question-image-upload');
-          toast.error(uploadError.message || "Failed to upload question image. Please try again.");
-          return;
-        }
+        submitFormData.append('questionImage', questionImageFile);
+      } else if (formData.questionImageUrl && !editingQuestion) {
+        // If editing and keeping existing image, you might need to handle this differently
+        submitFormData.append('questionImageUrl', formData.questionImageUrl);
       }
 
-      // Upload new explanation image if selected
       if (explanationImageFile) {
-        toast.loading("Uploading explanation image...", { id: 'explanation-image-upload' });
-        try {
-          explanationImageUrl = await uploadImage(explanationImageFile);
-          toast.dismiss('explanation-image-upload');
-        } catch (uploadError: any) {
-          toast.dismiss('explanation-image-upload');
-          toast.error(uploadError.message || "Failed to upload explanation image. Please try again.");
-          return;
-        }
+        submitFormData.append('explanationImage', explanationImageFile);
+      } else if (formData.explanationImageUrl && !editingQuestion) {
+        submitFormData.append('explanationImageUrl', formData.explanationImageUrl);
       }
-
-      const payload = {
-        topicId: formData.topicId,
-        questionText: formData.questionText,
-        option1: formData.option1,
-        option2: formData.option2,
-        option3: formData.option3,
-        option4: formData.option4,
-        correctOption: Number(formData.correctOption),
-        difficultyLevel: formData.difficultyLevel,
-        explanation: formData.explanation,
-        isActive: formData.isActive,
-        explanationImageUrl: explanationImageUrl || undefined,
-        questionImageUrl: questionImageUrl || undefined,
-      };
 
       if (editingQuestion) {
         await updateMutation.mutateAsync({
           id: editingQuestion.id,
-          data: payload,
+          data: submitFormData,
         });
       } else {
-        await createMutation.mutateAsync(payload);
+        await createMutation.mutateAsync(submitFormData);
       }
       handleCloseModal();
     } catch (error: any) {

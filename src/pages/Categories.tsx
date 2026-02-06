@@ -205,36 +205,6 @@ export const Categories = () => {
     setSubjectAssignments(updated);
   };
 
-  const uploadImage = async (file: File): Promise<string> => {
-    try {
-      // Create FormData
-      const formData = new FormData();
-      formData.append('image', file);
-
-      // Upload to your backend
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to upload image');
-      }
-
-      const data = await response.json();
-      
-      if (!data.imageUrl) {
-        throw new Error('Image URL not received from server');
-      }
-      
-      return data.imageUrl;
-    } catch (error) {
-      console.error('Image upload error:', error);
-      throw error;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -253,36 +223,30 @@ export const Categories = () => {
     }
 
     try {
-      let imageUrl = formData.imageUrl;
+      // Create FormData to send all data including image
+      const submitFormData = new FormData();
+      
+      // Append text fields
+      submitFormData.append('name', formData.name);
+      submitFormData.append('description', formData.description);
+      submitFormData.append('displayOrder', String(formData.displayOrder));
+      submitFormData.append('isActive', String(formData.isActive));
 
-      // Upload new image if selected
+      // Append image if selected
       if (imageFile) {
-        toast.loading("Uploading image...", { id: 'image-upload' });
-        try {
-          imageUrl = await uploadImage(imageFile);
-          toast.dismiss('image-upload');
-        } catch (uploadError: any) {
-          toast.dismiss('image-upload');
-          toast.error(uploadError.message || "Failed to upload image. Please try again.");
-          return;
-        }
+        submitFormData.append('image', imageFile);
+      } else if (formData.imageUrl && !editingCategory) {
+        // If editing and keeping existing image, you might need to handle this differently
+        submitFormData.append('imageUrl', formData.imageUrl);
       }
-
-      const submitData = {
-        name: formData.name,
-        description: formData.description,
-        imageUrl,
-        displayOrder: formData.displayOrder,
-        isActive: formData.isActive,
-      };
 
       if (editingCategory) {
         await updateMutation.mutateAsync({
           id: editingCategory.id,
-          data: submitData,
+          data: submitFormData,
         });
       } else {
-        await createMutation.mutateAsync(submitData);
+        await createMutation.mutateAsync(submitFormData);
       }
       handleCloseModal();
     } catch (error: any) {
