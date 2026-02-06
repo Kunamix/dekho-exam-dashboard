@@ -121,6 +121,10 @@ export const Questions = () => {
   const [explanationImageFile, setExplanationImageFile] = useState<File | null>(null);
   const [explanationImagePreview, setExplanationImagePreview] = useState<string>("");
   
+  // NEW: Track if user wants to delete existing images
+  const [removeQuestionImage, setRemoveQuestionImage] = useState(false);
+  const [removeExplanationImage, setRemoveExplanationImage] = useState(false);
+  
   const questionImageInputRef = useRef<HTMLInputElement>(null);
   const explanationImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -184,9 +188,11 @@ export const Questions = () => {
       if (type === 'question') {
         setQuestionImageFile(file);
         setQuestionImagePreview(preview);
+        setRemoveQuestionImage(false); // Clear delete flag when uploading new image
       } else {
         setExplanationImageFile(file);
         setExplanationImagePreview(preview);
+        setRemoveExplanationImage(false); // Clear delete flag when uploading new image
       }
     };
     reader.readAsDataURL(file);
@@ -196,6 +202,12 @@ export const Questions = () => {
     if (type === 'question') {
       setQuestionImageFile(null);
       setQuestionImagePreview("");
+      
+      // If editing and there was an existing image, mark for deletion
+      if (editingQuestion && formData.questionImageUrl) {
+        setRemoveQuestionImage(true);
+      }
+      
       setFormData({ ...formData, questionImageUrl: "" });
       if (questionImageInputRef.current) {
         questionImageInputRef.current.value = "";
@@ -203,6 +215,12 @@ export const Questions = () => {
     } else {
       setExplanationImageFile(null);
       setExplanationImagePreview("");
+      
+      // If editing and there was an existing image, mark for deletion
+      if (editingQuestion && formData.explanationImageUrl) {
+        setRemoveExplanationImage(true);
+      }
+      
       setFormData({ ...formData, explanationImageUrl: "" });
       if (explanationImageInputRef.current) {
         explanationImageInputRef.current.value = "";
@@ -234,6 +252,8 @@ export const Questions = () => {
       setExplanationImagePreview(question.explanationImageUrl || "");
       setQuestionImageFile(null);
       setExplanationImageFile(null);
+      setRemoveQuestionImage(false);
+      setRemoveExplanationImage(false);
     } else {
       setEditingQuestion(null);
       setFormData({
@@ -257,6 +277,8 @@ export const Questions = () => {
       setQuestionImagePreview("");
       setExplanationImageFile(null);
       setExplanationImagePreview("");
+      setRemoveQuestionImage(false);
+      setRemoveExplanationImage(false);
     }
     setIsModalOpen(true);
   };
@@ -267,6 +289,8 @@ export const Questions = () => {
     setQuestionImagePreview("");
     setExplanationImageFile(null);
     setExplanationImagePreview("");
+    setRemoveQuestionImage(false);
+    setRemoveExplanationImage(false);
     if (questionImageInputRef.current) {
       questionImageInputRef.current.value = "";
     }
@@ -326,19 +350,25 @@ export const Questions = () => {
       submitFormData.append('explanation', formData.explanation);
       submitFormData.append('isActive', String(formData.isActive));
 
-      // Append images with their specific field names
+      // Handle question image
       if (questionImageFile) {
+        // New image is being uploaded
         submitFormData.append('questionImage', questionImageFile);
-      } else if (formData.questionImageUrl && !editingQuestion) {
-        // If editing and keeping existing image, you might need to handle this differently
-        submitFormData.append('questionImageUrl', formData.questionImageUrl);
+      } else if (editingQuestion && removeQuestionImage) {
+        // User wants to delete existing image
+        submitFormData.append('removeImageQuestion', 'true');
       }
+      // If neither condition is true, keep existing image (no action needed)
 
+      // Handle explanation image
       if (explanationImageFile) {
+        // New image is being uploaded
         submitFormData.append('explanationImage', explanationImageFile);
-      } else if (formData.explanationImageUrl && !editingQuestion) {
-        submitFormData.append('explanationImageUrl', formData.explanationImageUrl);
+      } else if (editingQuestion && removeExplanationImage) {
+        // User wants to delete existing image
+        submitFormData.append('removeImageExplanation', 'true');
       }
+      // If neither condition is true, keep existing image (no action needed)
 
       if (editingQuestion) {
         await updateMutation.mutateAsync({
@@ -382,8 +412,8 @@ export const Questions = () => {
   };
 
   const downloadSampleCSV = () => {
-    const csv = `Serial Number,Question,Option A,Option B,Option C,Option D,Correct Answer,Explanation
-1,जीवों की मूलभूत...,कोशिका,ऊतक,अंग,अंगतंत्र,a,कोशिका जीवों की मूल इकाई है`;
+    const csv = `Serial Number,Question,Option A,Option B,Option C,Option D,Correct Answer,Explanation,Difficulty
+1,जीवों की मूलभूत...,कोशिका,ऊतक,अंग,अंगतंत्र,a,कोशिका जीवों की मूल इकाई है,MEDIUM`;
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -397,7 +427,7 @@ export const Questions = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this question?")) {
+    if (!confirm("Are you sure you want to delete this question? All associated images will also be deleted.")) {
       return;
     }
 
@@ -410,9 +440,12 @@ export const Questions = () => {
 
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
     try {
+      const toggleFormData = new FormData();
+      toggleFormData.append('isActive', String(!currentStatus));
+      
       await updateMutation.mutateAsync({
         id,
-        data: { isActive: !currentStatus },
+        data: toggleFormData,
       });
     } catch (error) {
       // Error already handled by hook
@@ -751,6 +784,16 @@ export const Questions = () => {
                 >
                   <X className="w-4 h-4" />
                 </button>
+                {editingQuestion && formData.questionImageUrl && !questionImageFile && (
+                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-primary/90 text-primary-foreground text-xs rounded">
+                    Existing Image
+                  </div>
+                )}
+                {questionImageFile && (
+                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-success/90 text-white text-xs rounded">
+                    New Image Selected
+                  </div>
+                )}
               </div>
             ) : (
               <div
@@ -779,6 +822,11 @@ export const Questions = () => {
             <p className="text-xs text-muted-foreground mt-2">
               ⚠️ Image must be less than 2MB in size
             </p>
+            {editingQuestion && removeQuestionImage && (
+              <p className="text-xs text-destructive mt-1">
+                ⚠️ Image will be deleted on save
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -860,6 +908,16 @@ export const Questions = () => {
                 >
                   <X className="w-4 h-4" />
                 </button>
+                {editingQuestion && formData.explanationImageUrl && !explanationImageFile && (
+                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-primary/90 text-primary-foreground text-xs rounded">
+                    Existing Image
+                  </div>
+                )}
+                {explanationImageFile && (
+                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-success/90 text-white text-xs rounded">
+                    New Image Selected
+                  </div>
+                )}
               </div>
             ) : (
               <div
@@ -888,6 +946,11 @@ export const Questions = () => {
             <p className="text-xs text-muted-foreground mt-2">
               ⚠️ Image must be less than 2MB in size
             </p>
+            {editingQuestion && removeExplanationImage && (
+              <p className="text-xs text-destructive mt-1">
+                ⚠️ Image will be deleted on save
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

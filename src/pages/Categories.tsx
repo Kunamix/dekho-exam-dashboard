@@ -28,20 +28,17 @@ import {
   useAssignSubjectsToCategory,
   Category,
   Subject,
-  SubjectAssignment
+  SubjectAssignment,
 } from "@/hooks/useCategory";
 
 export const Categories = () => {
-  const { 
-    data: categoriesData, 
+  const {
+    data: categoriesData,
     isLoading: isCategoriesLoading,
-    isError: isCategoriesError 
+    isError: isCategoriesError,
   } = useCategories();
-  
-  const { 
-    data: subjectsData,
-    isError: isSubjectsError 
-  } = useSubjects();
+
+  const { data: subjectsData, isError: isSubjectsError } = useSubjects();
 
   const createMutation = useCreateCategory();
   const updateMutation = useUpdateCategory();
@@ -51,10 +48,12 @@ export const Categories = () => {
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  
+
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [assigningCategory, setAssigningCategory] = useState<Category | null>(null);
-  
+  const [assigningCategory, setAssigningCategory] = useState<Category | null>(
+    null,
+  );
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -62,12 +61,15 @@ export const Categories = () => {
     displayOrder: 1,
     isActive: true,
   });
-  
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [removeImage, setRemoveImage] = useState(false); // Track if user wants to remove image
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [subjectAssignments, setSubjectAssignments] = useState<SubjectAssignment[]>([]);
+
+  const [subjectAssignments, setSubjectAssignments] = useState<
+    SubjectAssignment[]
+  >([]);
 
   const categories: Category[] = categoriesData?.data?.categories || [];
   const subjects: Subject[] = subjectsData?.data?.subjects || [];
@@ -75,7 +77,7 @@ export const Categories = () => {
   const filteredCategories = categories.filter(
     (cat) =>
       cat.name.toLowerCase().includes(search.toLowerCase()) ||
-      cat.description?.toLowerCase().includes(search.toLowerCase())
+      cat.description?.toLowerCase().includes(search.toLowerCase()),
   );
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -83,11 +85,11 @@ export const Categories = () => {
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    
+
     if (!file) return;
 
     // Check file type
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       toast.error("Please select a valid image file");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -98,7 +100,9 @@ export const Categories = () => {
     // Check file size (2MB = 2 * 1024 * 1024 bytes)
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error("Image size must be less than 2MB. Please choose a smaller image.");
+      toast.error(
+        "Image size must be less than 2MB. Please choose a smaller image.",
+      );
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -106,6 +110,7 @@ export const Categories = () => {
     }
 
     setImageFile(file);
+    setRemoveImage(false); // If selecting new image, don't remove
 
     // Create preview
     const reader = new FileReader();
@@ -118,6 +123,12 @@ export const Categories = () => {
   const handleRemoveImage = () => {
     setImageFile(null);
     setImagePreview("");
+
+    // If editing and had an existing image, mark for removal
+    if (editingCategory && editingCategory.imageUrl) {
+      setRemoveImage(true);
+    }
+
     setFormData({ ...formData, imageUrl: "" });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -136,6 +147,7 @@ export const Categories = () => {
       });
       setImagePreview(category.imageUrl || "");
       setImageFile(null);
+      setRemoveImage(false);
     } else {
       setEditingCategory(null);
       setFormData({
@@ -147,6 +159,7 @@ export const Categories = () => {
       });
       setImagePreview("");
       setImageFile(null);
+      setRemoveImage(false);
     }
     setIsModalOpen(true);
   };
@@ -156,6 +169,7 @@ export const Categories = () => {
     setEditingCategory(null);
     setImageFile(null);
     setImagePreview("");
+    setRemoveImage(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -164,11 +178,12 @@ export const Categories = () => {
   const handleOpenAssignModal = (category: Category) => {
     setAssigningCategory(category);
 
-    const existingAssignments = category.categorySubjects?.map((cs) => ({
-      subjectId: cs.subjectId,
-      questionsPerTest: cs.questionsPerTest,
-      displayOrder: cs.displayOrder,
-    })) || [];
+    const existingAssignments =
+      category.categorySubjects?.map((cs) => ({
+        subjectId: cs.subjectId,
+        questionsPerTest: cs.questionsPerTest,
+        displayOrder: cs.displayOrder,
+      })) || [];
 
     setSubjectAssignments(existingAssignments);
     setIsAssignModalOpen(true);
@@ -217,7 +232,9 @@ export const Categories = () => {
     if (imageFile) {
       const maxSize = 2 * 1024 * 1024; // 2MB
       if (imageFile.size > maxSize) {
-        toast.error("Image size must be less than 2MB. Please choose a smaller image.");
+        toast.error(
+          "Image size must be less than 2MB. Please choose a smaller image.",
+        );
         return;
       }
     }
@@ -225,20 +242,22 @@ export const Categories = () => {
     try {
       // Create FormData to send all data including image
       const submitFormData = new FormData();
-      
-      // Append text fields
-      submitFormData.append('name', formData.name);
-      submitFormData.append('description', formData.description);
-      submitFormData.append('displayOrder', String(formData.displayOrder));
-      submitFormData.append('isActive', String(formData.isActive));
 
-      // Append image if selected
+      // Append text fields
+      submitFormData.append("name", formData.name);
+      submitFormData.append("description", formData.description);
+      submitFormData.append("displayOrder", String(formData.displayOrder));
+      submitFormData.append("isActive", String(formData.isActive));
+
+      // Handle image scenarios
       if (imageFile) {
-        submitFormData.append('image', imageFile);
-      } else if (formData.imageUrl && !editingCategory) {
-        // If editing and keeping existing image, you might need to handle this differently
-        submitFormData.append('imageUrl', formData.imageUrl);
+        // SCENARIO 1: New image file selected
+        submitFormData.append("image", imageFile);
+      } else if (removeImage) {
+        // SCENARIO 2: User explicitly removed the image
+        submitFormData.append("removeImage", "true");
       }
+      // SCENARIO 3: No changes to image (keep existing) - don't append anything
 
       if (editingCategory) {
         await updateMutation.mutateAsync({
@@ -249,9 +268,13 @@ export const Categories = () => {
         await createMutation.mutateAsync(submitFormData);
       }
       handleCloseModal();
-    } catch (error: any) {
-      console.error('Category submission error:', error);
-      toast.error(error.message || "Failed to save category. Please try again.");
+    } catch (error: unknown) {
+      console.error("Category submission error:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to save category. Please try again.";
+      toast.error(errorMessage);
     }
   };
 
@@ -304,9 +327,13 @@ export const Categories = () => {
 
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
     try {
+      // Create FormData for the toggle update
+      const toggleFormData = new FormData();
+      toggleFormData.append("isActive", String(!currentStatus));
+
       await updateMutation.mutateAsync({
         id,
-        data: { isActive: !currentStatus },
+        data: toggleFormData,
       });
     } catch (error) {
       // Error already handled by hook
@@ -345,7 +372,9 @@ export const Categories = () => {
       ) : isCategoriesError ? (
         <div className="flex flex-col items-center justify-center h-64 text-center px-4">
           <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Unable to load categories</h3>
+          <h3 className="text-lg font-semibold mb-2">
+            Unable to load categories
+          </h3>
           <p className="text-sm text-muted-foreground mb-4">
             There was a problem loading the categories. Please try again.
           </p>
@@ -476,8 +505,8 @@ export const Categories = () => {
             <label className="block text-sm font-medium mb-2">
               Category Image
             </label>
-            
-            {imagePreview ? (
+
+            {imagePreview && !removeImage ? (
               <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
                 <img
                   src={imagePreview}
@@ -516,7 +545,7 @@ export const Categories = () => {
               className="hidden"
               disabled={isSubmitting}
             />
-            
+
             <p className="text-xs text-muted-foreground mt-2">
               ⚠️ Image must be less than 2MB in size
             </p>

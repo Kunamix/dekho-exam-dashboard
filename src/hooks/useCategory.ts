@@ -59,8 +59,8 @@ export const useCategories = (filters?: CategoryFilters) => {
       const { data } = await api.get("/categories", {
         params: filters,
       });
-      return data; 
-    }
+      return data;
+    },
   });
 };
 
@@ -70,7 +70,7 @@ export const useSubjects = () => {
     queryFn: async () => {
       const { data } = await api.get("/subjects"); // Assuming endpoint is /subjects
       return data;
-    }
+    },
   });
 };
 
@@ -91,8 +91,12 @@ export const useCreateCategory = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: Partial<Category>) => {
-      const { data } = await api.post("/categories/create", payload);
+    mutationFn: async (payload: FormData) => {
+      const { data } = await api.post("/categories/create", payload, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
       return data;
     },
     onSuccess: () => {
@@ -114,9 +118,13 @@ export const useUpdateCategory = () => {
       data: payload,
     }: {
       id: string;
-      data: Partial<Category>;
+      data: FormData;
     }) => {
-      const { data } = await api.put(`/categories/${id}`, payload);
+      const { data } = await api.put(`/categories/${id}`, payload, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
       return data;
     },
     onSuccess: () => {
@@ -160,7 +168,7 @@ export const useAssignSubjectsToCategory = () => {
     }) => {
       const { data } = await api.put(
         `/categories/${categoryId}/assign-subjects`,
-        { subjects }
+        { subjects },
       );
       return data;
     },
