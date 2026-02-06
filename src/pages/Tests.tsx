@@ -589,41 +589,7 @@ export const Tests = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Test Type
-              </label>
-              <div className="flex gap-4 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="type"
-                    checked={!formData.isPaid}
-                    onChange={() =>
-                      setFormData({ ...formData, isPaid: false })
-                    }
-                    className="w-4 h-4 text-primary"
-                    disabled={isSubmitting}
-                  />
-                  <span>Free</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="type"
-                    checked={formData.isPaid}
-                    onChange={() =>
-                      setFormData({ ...formData, isPaid: true })
-                    }
-                    className="w-4 h-4 text-primary"
-                    disabled={isSubmitting}
-                  />
-                  <span>Paid</span>
-                </label>
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">
                 Test Number
