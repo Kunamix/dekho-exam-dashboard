@@ -29,6 +29,8 @@ export interface Payment {
 }
 
 export interface PaymentFilters {
+  page?: number;
+  limit?: number;
   startDate?: string;
   endDate?: string;
   status?: string;
@@ -96,7 +98,7 @@ export const usePaymentStats = () => {
 export const useExportPayments = () => {
   return useMutation({
     mutationFn: async (filters?: PaymentFilters) => {
-      const {data} = await api.get("/payments/export", {
+      const { data } = await api.get("/payments/export", {
         params: filters,
         responseType: "blob",
       });
@@ -110,16 +112,17 @@ export const useExportPayments = () => {
       const link = document.createElement("a");
       const filename =
         response.headers["content-disposition"]
-          ?.split("filename=")[1]?.replace(/['"]/g, '') || 
-        `payments_export_${new Date().toISOString().split('T')[0]}.csv`;
-      
+          ?.split("filename=")[1]
+          ?.replace(/['"]/g, "") ||
+        `payments_export_${new Date().toISOString().split("T")[0]}.csv`;
+
       link.href = url;
       link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       toast.success("Payments exported successfully");
     },
     onError: (error: AxiosError<{ message: string }>) => {

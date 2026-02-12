@@ -1,57 +1,83 @@
-import { useState } from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
-} from 'recharts';
-import { 
-  Download, Eye, Calendar, Loader2, DollarSign, TrendingUp, 
-  CheckCircle, XCircle, AlertCircle
-} from 'lucide-react';
+import { useState } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import {
+  Download,
+  Eye,
+  Calendar,
+  Loader2,
+  DollarSign,
+  TrendingUp,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+} from "lucide-react";
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { DataTable } from '@/components/common/DataTable';
-import { StatsCard } from '@/components/common/StatsCard';
-import { Badge } from '@/components/common/Badge';
-import { PaymentDetailsModal } from '@/components/PaymentDetailsModal';
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { DataTable } from "@/components/common/DataTable";
+import { StatsCard } from "@/components/common/StatsCard";
+import { Badge } from "@/components/common/Badge";
+import { PaymentDetailsModal } from "@/components/PaymentDetailsModal";
 
-import { 
-  usePayments, 
-  usePaymentStats, 
+import {
+  usePayments,
+  usePaymentStats,
   useExportPayments,
-  type Payment 
-} from '@/hooks/usePayment';
+  type Payment,
+} from "@/hooks/usePayment";
 
 export const Payments = () => {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+
+  // Filter state
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const { 
-    data: paymentsData, 
+  const {
+    data: paymentsData,
     isLoading: isPaymentsLoading,
-    isError: isPaymentsError 
-  } = usePayments({ startDate, endDate });
-  
-  const { 
-    data: statsData, 
+    isError: isPaymentsError,
+  } = usePayments({
+    page,
+    limit,
+    startDate,
+    endDate,
+  });
+
+  const {
+    data: statsData,
     isLoading: isStatsLoading,
-    isError: isStatsError 
+    isError: isStatsError,
   } = usePaymentStats();
 
-  const { mutate: exportPayments, isPending: isExporting } = useExportPayments();
+  const { mutate: exportPayments, isPending: isExporting } =
+    useExportPayments();
 
   const isLoading = isPaymentsLoading || isStatsLoading;
   const hasError = isPaymentsError || isStatsError;
-  
-  const payments = paymentsData?.data?.payments || [];
+
+  // Fix data extraction - payments are directly under data, not nested
+  const payments = Array.isArray(paymentsData?.data) ? paymentsData.data : [];
+  const paginationInfo = paymentsData?.pagination; // If pagination info exists
   const stats = statsData?.data || {
     totalRevenue: 0,
     currentMonthRevenue: 0,
     revenueChange: 0,
     successfulTransactions: 0,
     failedTransactions: 0,
-    monthlyRevenue: []
+    monthlyRevenue: [],
   };
 
   const handleExport = () => {
@@ -68,94 +94,121 @@ export const Payments = () => {
     setTimeout(() => setSelectedPayment(null), 200);
   };
 
+  // Pagination handlers
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1); // Reset to first page when limit changes
+  };
+
+  // Date filter handlers that reset pagination
+  const handleStartDateChange = (newDate: string) => {
+    setStartDate(newDate);
+    setPage(1); // Reset to first page when filter changes
+  };
+
+  const handleEndDateChange = (newDate: string) => {
+    setEndDate(newDate);
+    setPage(1); // Reset to first page when filter changes
+  };
+
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
       maximumFractionDigits: 0,
     }).format(value);
   };
 
-  const statusVariant: Record<string, 'success' | 'danger' | 'warning'> = {
-    SUCCESS: 'success',
-    COMPLETED: 'success',
-    FAILED: 'danger',
-    PENDING: 'warning',
-    REFUNDED: 'warning',
+  const statusVariant: Record<string, "success" | "danger" | "warning"> = {
+    SUCCESS: "success",
+    COMPLETED: "success",
+    FAILED: "danger",
+    PENDING: "warning",
+    REFUNDED: "warning",
   };
 
   const columns = [
-    { 
-      key: 'transactionId', 
-      label: 'Transaction ID',
+    {
+      key: "transactionId",
+      label: "Transaction ID",
       render: (item: Payment) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {item.transactionId || item.orderId || 'N/A'}
+          {item.transactionId || item.orderId || "N/A"}
         </span>
-      )
+      ),
     },
-    { 
-      key: 'user', 
-      label: 'User',
+    {
+      key: "user",
+      label: "User",
       render: (item: Payment) => (
         <div>
-          <p className="font-medium text-sm">{item.userName || item.user?.name || 'N/A'}</p>
-          <p className="text-xs text-muted-foreground">{item.phone || item.user?.phone || 'N/A'}</p>
+          <p className="font-medium text-sm">
+            {item.userName || item.user?.name || "N/A"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {item.phone || item.user?.phone || "N/A"}
+          </p>
         </div>
-      )
+      ),
     },
-    { 
-      key: 'amount', 
-      label: 'Amount',
+    {
+      key: "amount",
+      label: "Amount",
       sortable: true,
       render: (item: Payment) => (
         <span className="font-medium">{formatCurrency(item.amount)}</span>
-      )
+      ),
     },
-    { 
-      key: 'gateway', 
-      label: 'Gateway',
+    {
+      key: "gateway",
+      label: "Gateway",
       render: (item: Payment) => (
-        <span className="text-sm capitalize">{item.gateway?.toLowerCase() || 'N/A'}</span>
-      )
+        <span className="text-sm capitalize">
+          {item.gateway?.toLowerCase() || "N/A"}
+        </span>
+      ),
     },
-    { 
-      key: 'status', 
-      label: 'Status',
+    {
+      key: "status",
+      label: "Status",
       render: (item: Payment) => (
-        <Badge variant={statusVariant[item.status] || 'warning'}>
+        <Badge variant={statusVariant[item.status] || "warning"}>
           {item.status}
         </Badge>
-      )
+      ),
     },
-    { 
-      key: 'date', 
-      label: 'Date',
+    {
+      key: "date",
+      label: "Date",
       sortable: true,
       render: (item: Payment) => (
         <span className="text-sm">
-          {new Date(item.date || item.createdAt).toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
+          {new Date(item.date || item.createdAt).toLocaleString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
           })}
         </span>
-      )
+      ),
     },
-    { 
-      key: 'actions', 
-      label: 'Actions',
+    {
+      key: "actions",
+      label: "Actions",
       render: (item: Payment) => (
-        <button 
+        <button
           className="p-2 rounded-lg hover:bg-muted transition-colors group"
           title="View Details"
           onClick={() => handleViewPayment(item)}
         >
           <Eye className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
         </button>
-      )
+      ),
     },
   ];
 
@@ -174,7 +227,9 @@ export const Payments = () => {
       <DashboardLayout title="Payments & Revenue">
         <div className="flex flex-col items-center justify-center h-[80vh] text-center px-4">
           <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Unable to load payment data</h3>
+          <h3 className="text-lg font-semibold mb-2">
+            Unable to load payment data
+          </h3>
           <p className="text-sm text-muted-foreground mb-4">
             There was a problem loading the payment data. Please try again.
           </p>
@@ -190,9 +245,9 @@ export const Payments = () => {
   }
 
   return (
-    <DashboardLayout 
-      title="Payments & Revenue" 
-      breadcrumbs={[{ label: 'Payments' }]}
+    <DashboardLayout
+      title="Payments & Revenue"
+      breadcrumbs={[{ label: "Payments" }]}
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
@@ -201,7 +256,7 @@ export const Payments = () => {
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => handleStartDateChange(e.target.value)}
               className="px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
               placeholder="Start Date"
             />
@@ -210,7 +265,7 @@ export const Payments = () => {
           <input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => handleEndDateChange(e.target.value)}
             className="px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
             placeholder="End Date"
           />
@@ -246,33 +301,38 @@ export const Payments = () => {
       </div>
 
       <div className="bg-card border border-border rounded-lg p-6 mb-8 shadow-sm">
-        <h3 className="text-lg font-semibold mb-4">Monthly Revenue (Last 12 Months)</h3>
+        <h3 className="text-lg font-semibold mb-4">
+          Monthly Revenue (Last 12 Months)
+        </h3>
         <div className="w-full h-[300px]">
           {stats.monthlyRevenue && stats.monthlyRevenue.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.monthlyRevenue}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="month" 
+                <XAxis
+                  dataKey="month"
                   tick={{ fontSize: 12 }}
                   className="text-muted-foreground"
                 />
-                <YAxis 
+                <YAxis
                   tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => `₹${(value / 1000)}k`}
+                  tickFormatter={(value) => `₹${value / 1000}k`}
                   className="text-muted-foreground"
                 />
-                <Tooltip 
-                  formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
+                <Tooltip
+                  formatter={(value: number) => [
+                    formatCurrency(value),
+                    "Revenue",
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
                   }}
                 />
-                <Bar 
-                  dataKey="revenue" 
-                  fill="hsl(var(--primary))" 
+                <Bar
+                  dataKey="revenue"
+                  fill="hsl(var(--primary))"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
@@ -295,6 +355,10 @@ export const Payments = () => {
           data={payments}
           searchPlaceholder="Search by transaction ID or user..."
           emptyMessage="No transactions found"
+          pagination={paginationInfo}
+          onPageChange={handlePageChange}
+          onLimitChange={handleLimitChange}
+          searchable={false} // Disable search since we'll handle it server-side later
         />
       </div>
 

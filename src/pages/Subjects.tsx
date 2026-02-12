@@ -6,7 +6,12 @@ import { Toggle } from "@/components/common/Toggle";
 import { Badge } from "@/components/common/Badge";
 import { Plus, Edit, Trash2, Eye, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useCreateSubject, useDeleteSubject, useSubjects, useUpdateSubject } from "@/hooks/useSubject";
+import {
+  useCreateSubject,
+  useDeleteSubject,
+  useSubjects,
+  useUpdateSubject,
+} from "@/hooks/useSubject";
 import { useCategories } from "@/hooks/useCategory";
 
 interface Subject {
@@ -24,16 +29,24 @@ interface Subject {
 }
 
 export const Subjects = () => {
-  const { 
-    data: subjectsData, 
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+
+  // Filter state
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+
+  const {
+    data: subjectsData,
     isLoading: isSubjectsLoading,
-    isError: isSubjectsError 
-  } = useSubjects();
-  
-  const { 
-    data: categoriesData,
-    isError: isCategoriesError 
-  } = useCategories();
+    isError: isSubjectsError,
+  } = useSubjects({
+    page,
+    limit,
+    ...(selectedCategory && { categoryId: selectedCategory }),
+  });
+
+  const { data: categoriesData, isError: isCategoriesError } = useCategories();
 
   const createMutation = useCreateSubject();
   const updateMutation = useUpdateSubject();
@@ -44,22 +57,16 @@ export const Subjects = () => {
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [viewingSubject, setViewingSubject] = useState<Subject | null>(null);
 
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     isActive: true,
   });
 
+  // Extract subjects and pagination data from API response
   const subjects = subjectsData?.data?.subjects || [];
+  const paginationInfo = subjectsData?.data?.pagination;
   const categories = categoriesData?.data?.categories || [];
-
-  const filteredSubjects = selectedCategory
-    ? subjects.filter((subject: Subject) =>
-        subject.categories?.some((cat) => cat.id === selectedCategory)
-      )
-    : subjects;
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
@@ -141,6 +148,22 @@ export const Subjects = () => {
     } catch (error) {
       // Error already handled by hook
     }
+  };
+
+  // Pagination handlers
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1); // Reset to first page when limit changes
+  };
+
+  // Category filter handler
+  const handleCategoryFilterChange = (newCategory: string) => {
+    setSelectedCategory(newCategory);
+    setPage(1); // Reset to first page when filter changes
   };
 
   const columns = [
@@ -239,12 +262,14 @@ export const Subjects = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         {isCategoriesError ? (
           <div className="w-full sm:w-64 p-3 bg-muted/30 rounded-lg border border-border">
-            <p className="text-sm text-muted-foreground">Unable to load categories</p>
+            <p className="text-sm text-muted-foreground">
+              Unable to load categories
+            </p>
           </div>
         ) : (
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={(e) => handleCategoryFilterChange(e.target.value)}
             className="input-field w-full sm:w-64"
           >
             <option value="">All Categories</option>
@@ -271,7 +296,9 @@ export const Subjects = () => {
       ) : isSubjectsError ? (
         <div className="flex flex-col items-center justify-center py-20 text-center px-4">
           <AlertCircle className="w-12 h-12 text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Unable to load subjects</h3>
+          <h3 className="text-lg font-semibold mb-2">
+            Unable to load subjects
+          </h3>
           <p className="text-sm text-muted-foreground mb-4">
             There was a problem loading the subjects. Please try again.
           </p>
@@ -285,9 +312,13 @@ export const Subjects = () => {
       ) : (
         <DataTable
           columns={columns}
-          data={filteredSubjects}
+          data={subjects}
           searchPlaceholder="Search subjects..."
           emptyMessage="No subjects found"
+          pagination={paginationInfo}
+          onPageChange={handlePageChange}
+          onLimitChange={handleLimitChange}
+          searchable={false} // Disable search since we'll handle it server-side later
         />
       )}
 
@@ -417,9 +448,7 @@ export const Subjects = () => {
                 <p className="text-2xl font-bold text-primary">
                   {viewingSubject.categories?.length || 0}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Categories
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Categories</p>
               </div>
             </div>
 
@@ -427,7 +456,8 @@ export const Subjects = () => {
               <label className="text-sm font-medium text-muted-foreground mb-2 block">
                 Used in Categories
               </label>
-              {viewingSubject.categories && viewingSubject.categories.length > 0 ? (
+              {viewingSubject.categories &&
+              viewingSubject.categories.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {viewingSubject.categories.map((category) => (
                     <Badge key={category.id} variant="primary">
