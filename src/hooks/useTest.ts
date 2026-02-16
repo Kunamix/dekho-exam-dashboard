@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api";
+import api, { mobileApi } from "@/lib/api";
 import { toast } from "sonner";
 import { AxiosError } from "axios";
 
@@ -190,8 +190,32 @@ export const useRecentTests = () => {
   return useQuery({
     queryKey: ["dashboard", "recent-tests"],
     queryFn: async () => {
-      const { data } = await api.get("/dashboard/recent-tests");
+      const { data } = await mobileApi.get("/dashboard/recent-tests");
       return data; // ✅ Handle both nested and flat responses
+    },
+    retry: false,
+  });
+};
+
+export const useTestRankings = (testId?: string) => {
+  return useQuery({
+    queryKey: ["dashboard", "test-rankings", testId],
+    queryFn: async () => {
+      const res = await mobileApi.get(`/profile/tests/${testId}/rankings`);
+      return res.data?.data; // ✅ return inner data
+    },
+    enabled: !!testId,
+    retry: false,
+  });
+};
+
+// useGlobalRankings
+export const useGlobalRankings = () => {
+  return useQuery({
+    queryKey: ["dashboard", "global-rankings"],
+    queryFn: async () => {
+      const { data } = await mobileApi.get("/profile/api/rankings/global");
+      return data;
     },
     retry: false,
   });

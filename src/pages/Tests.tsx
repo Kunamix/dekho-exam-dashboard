@@ -21,9 +21,11 @@ import {
   useUpdateTest,
   useDeleteTest,
   Test,
+  useTestRankings, 
 } from "@/hooks/useTest";
 import { useCategories } from "@/hooks/useCategory";
 import { useSubjects } from "@/hooks/useSubject";
+
 
 export const Tests = () => {
   const {
@@ -43,6 +45,8 @@ export const Tests = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedType, setSelectedType] = useState("");
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
+  const [isRankingModalOpen, setIsRankingModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     categoryId: "",
@@ -55,6 +59,14 @@ export const Tests = () => {
     testNumber: 1,
     isActive: true,
   });
+  const {
+  data: rankings,
+  isLoading: isRankLoading,
+  isError: isRankError,
+} = useTestRankings(selectedTestId || undefined);
+
+console.log("Rankings Data:", rankings); // Debugging line
+
 
   const tests = (testsData?.data?.tests as Test[]) || [];
   const categories = categoriesData?.data?.categories || [];
@@ -275,7 +287,7 @@ export const Tests = () => {
       key: "isPaid",
       label: "Type",
       render: (item: Test) => (
-        <Badge variant={item.isPaid ? "default" : "secondary"}>
+        <Badge variant={item.isPaid ? "default" : "info"}>
           {item.isPaid ? "Paid" : "Free"}
         </Badge>
       ),
@@ -289,41 +301,54 @@ export const Tests = () => {
           onChange={() => handleToggleActive(item.id, item.isActive)}
         />
       ),
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      render: (item: Test) => (
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleOpenModal(item)}
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
-            title="Edit test"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleDelete(item.id)}
-            disabled={deleteMutation.isPending}
-            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
-            title="Delete test"
-          >
-            {deleteMutation.isPending && editingTest?.id === item.id ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-      ),
-    },
+    },{
+  key: "actions",
+  label: "Actions",
+  render: (item: Test) => (
+    <div className="flex gap-2">
+      {/* View Rankings */}
+      <button
+        onClick={() => {
+          setSelectedTestId(item.id);
+          setIsRankingModalOpen(true);
+        }}
+        className="p-2 rounded-lg hover:bg-muted transition-colors"
+        title="View Rankings"
+      >
+        <Award className="w-4 h-4 text-primary" />
+      </button>
+
+      {/* Edit */}
+      <button
+        onClick={() => handleOpenModal(item)}
+        className="p-2 rounded-lg hover:bg-muted transition-colors"
+        title="Edit test"
+      >
+        <Edit className="w-4 h-4" />
+      </button>
+
+      {/* Delete */}
+      <button
+        onClick={() => handleDelete(item.id)}
+        disabled={deleteMutation.isPending}
+        className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors disabled:opacity-50"
+        title="Delete test"
+      >
+        {deleteMutation.isPending && editingTest?.id === item.id ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Trash2 className="w-4 h-4" />
+        )}
+      </button>
+    </div>
+  ),
+}
   ];
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Tests Management">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Tests Management</h1>
           <div className="flex gap-3">
             {isCategoriesError ? (
               <div className="text-sm text-destructive">
@@ -643,6 +668,77 @@ export const Tests = () => {
           </div>
         </form>
       </Modal>
+      {/* Rankings Modal */}
+<Modal
+  isOpen={isRankingModalOpen}
+  onClose={() => {
+    setIsRankingModalOpen(false);
+    setSelectedTestId(null);
+  }}
+  title="Test Rankings"
+  size="lg"
+>
+  {isRankLoading ? (
+    <div className="flex justify-center p-8">
+      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+    </div>
+  ) : isRankError ? (
+    <div className="text-center text-destructive p-6">
+      Failed to load rankings
+    </div>
+  ) : rankings ? (
+    <div className="space-y-6">
+      {/* Top Rankers */}
+      <div>
+        <div className="flex justify-between mb-3">
+          <h4 className="font-semibold">Top Rankers</h4>
+          <span className="text-sm text-muted-foreground">
+            Total Participants: {rankings.totalParticipants}
+          </span>
+        </div>
+
+        <div className="space-y-2 max-h-80 overflow-y-auto">
+          {rankings.topRankers?.length ? (
+            rankings.topRankers.map((user: any) => (
+              <div
+                key={user.rank}
+                className="flex justify-between items-center border rounded-lg p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="font-bold text-primary w-8">
+                    #{user.rank}
+                  </div>
+
+                  <div>
+                    <div className="font-medium">
+                      {user.userName}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {user.percentage}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-sm font-medium">
+                  {user.totalMarks} marks
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center text-muted-foreground py-6">
+              No ranking data available
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="text-center text-muted-foreground py-6">
+      No ranking data found
+    </div>
+  )}
+</Modal>
+
     </DashboardLayout>
   );
 };

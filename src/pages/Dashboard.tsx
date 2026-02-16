@@ -1,115 +1,90 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { 
+import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { 
-  Users, FolderOpen, HelpCircle, CreditCard, RefreshCw, Loader2, ArrowUpRight, ArrowDownRight
+import {
+  Users, FolderOpen, HelpCircle, CreditCard,
+  RefreshCw, Loader2, Trophy, Crown, Medal
 } from 'lucide-react';
 
 // Components
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { StatsCard } from '@/components/common/StatsCard';
-import { DataTable } from '@/components/common/DataTable';
-import { Badge } from '@/components/common/Badge';
 
 // Hooks
-import { 
-  useDashboardStats, 
-  useUserAnalytics, 
+import {
+  useDashboardStats,
+  useUserAnalytics,
   useRevenueAnalytics,
   useTestAnalytics
 } from '@/hooks/useDashboard';
+import { useGlobalRankings } from '@/hooks/useTest';
 
 export const Dashboard = () => {
   const queryClient = useQueryClient();
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  // 1. Fetch Data using the new Hooks
+  // Core Data
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
   const { data: userAnalytics, isLoading: usersLoading } = useUserAnalytics();
   const { data: revenueAnalytics, isLoading: revenueLoading } = useRevenueAnalytics();
   const { data: testAnalytics, isLoading: testsLoading } = useTestAnalytics();
 
+  // Global Rankings
+  const { data: globalRankings, isLoading: rankingLoading } = useGlobalRankings();
+
+  console.log("globalRankings:", globalRankings); // Debugging line
+  
+
   const isLoading = statsLoading || usersLoading || revenueLoading || testsLoading;
 
-  // 2. Refresh Handler
+  /* ================= Refresh ================= */
   const handleRefresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["dashboard", "stats"] }),
-      queryClient.invalidateQueries({ queryKey: ['dashboard','charts'] }),
-      queryClient.invalidateQueries({ queryKey: ['recent-users-widget'] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "charts"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard", "global-rankings"] })
     ]);
     setLastUpdated(new Date());
   };
 
-  // 3. Formatters
-  const formatCurrency = (value: number = 0) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatNumber = (value: number = 0) => {
-    return new Intl.NumberFormat('en-IN').format(value);
-  };
-
-  // 4. Safe Data Defaults (Matches your Backend Response Structure)
-  const safeStats = stats?.data || { 
-    totalUsers: 0, 
-    userGrowth: 0, 
-    totalCategories: 0, 
-    totalQuestions: 0, 
-    activeSubscriptions: 0, 
+  /* ================= Safe Data ================= */
+  const safeStats = stats?.data || {
+    totalUsers: 0,
+    userGrowth: 0,
+    totalCategories: 0,
+    totalQuestions: 0,
     totalRevenue: 0,
     revenueGrowth: 0
   };
 
-
   const registrationData = userAnalytics?.registrationData || [];
-  const recentUsersList = userAnalytics?.recentUsers || [];
-
-  console.log("user analytics ", userAnalytics)
-  console.log("user revenue ", revenueAnalytics)
-  console.log("user test ", testAnalytics)
   const monthlyRevenueData = revenueAnalytics?.monthlyRevenue || [];
   const subscriptionDistribution = revenueAnalytics?.distribution || [];
-
   const attemptsData = testAnalytics?.testAttemptsByCategory || [];
 
-  // 5. Table Columns
-  const recentUsersColumns = [
-    { key: 'name', label: 'User Name', sortable: true },
-    { key: 'phone', label: 'Phone Number' },
-    { 
-      key: 'registeredOn', 
-      label: 'Registered On', 
-      render: (item: any) => new Date(item.registeredOn).toLocaleDateString('en-IN')
-    },
-    { 
-      key: 'status', 
-      label: 'Status',
-      render: (item: any) => (
-        <Badge variant={item.status === 'Active' ? 'success' : 'warning'}>
-          {item.status}
-        </Badge>
-      )
-    },
-  ];
+  // Rankings
+  const rankingList = globalRankings?.data?.topRankers?.slice(0, 20) || [];
+  const podium = rankingList.slice(0, 3);
+  const others = rankingList.slice(3);
 
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', '#FFBB28', '#FF8042'];
+  const formatCurrency = (value: number = 0) =>
+    new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(value);
+
+  const formatNumber = (value: number = 0) =>
+    new Intl.NumberFormat('en-IN').format(value);
 
   if (isLoading) {
     return (
       <DashboardLayout title="Dashboard">
-        <div className="flex h-[80vh] w-full items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading dashboard analytics...</p>
-          </div>
+        <div className="flex h-[80vh] items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
         </div>
       </DashboardLayout>
     );
@@ -117,213 +92,187 @@ export const Dashboard = () => {
 
   return (
     <DashboardLayout title="Dashboard">
-      {/* Header & Refresh */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Last updated: {lastUpdated.toLocaleTimeString()}</span>
+
+      {/* Header */}
+      <div className="flex justify-between mb-6">
+        <div className="text-sm text-muted-foreground">
+          Last updated: {lastUpdated.toLocaleTimeString()}
         </div>
-        <button 
-          onClick={handleRefresh}
-          className="btn-ghost flex items-center gap-2 text-sm hover:bg-muted p-2 rounded-md transition-colors"
-        >
+        <button onClick={handleRefresh} className="btn-ghost flex gap-2">
           <RefreshCw className="w-4 h-4" />
-          Refresh Data
+          Refresh
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Stats */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
           title="Total Users"
           value={formatNumber(safeStats.totalUsers)}
           icon={Users}
           change={safeStats.userGrowth}
-          variant="primary"
         />
         <StatsCard
-          title="Total Categories"
+          title="Categories"
           value={safeStats.totalCategories}
           icon={FolderOpen}
-          variant="success"
         />
         <StatsCard
-          title="Total Questions"
+          title="Questions"
           value={formatNumber(safeStats.totalQuestions)}
           icon={HelpCircle}
-          variant="warning"
         />
         <StatsCard
-          title="Total Revenue"
+          title="Revenue"
           value={formatCurrency(safeStats.totalRevenue)}
           icon={CreditCard}
           change={safeStats.revenueGrowth}
-          variant="primary"
         />
       </div>
 
-      {/* Charts Row 1: Growth & Engagement */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* User Registrations Chart */}
+      {/* Charts Row */}
+      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+
+        {/* User Growth */}
         <div className="dashboard-card p-6">
-          <h3 className="section-title mb-4">User Registrations (Last 15 Days)</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={registrationData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="users" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))' }}
-                  name="New Users"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <h3 className="section-title mb-4">User Registrations</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={registrationData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="users" stroke="hsl(var(--primary))" />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Test Attempts Bar Chart */}
+        {/* Test Attempts */}
         <div className="dashboard-card p-6">
           <h3 className="section-title mb-4">Top Categories by Attempts</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={attemptsData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis 
-                  dataKey="category" 
-                  type="category" 
-                  tick={{ fontSize: 11 }} 
-                  width={100}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--card))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                />
-                <Bar 
-                  dataKey="attempts" 
-                  fill="hsl(var(--primary))" 
-                  radius={[0, 4, 4, 0]} 
-                  name="Test Attempts"
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={attemptsData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis dataKey="category" type="category" width={100} />
+              <Tooltip />
+              <Bar dataKey="attempts" fill="hsl(var(--primary))" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Charts Row 2: Finance & Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        
-        {/* Revenue Trend (Bar) */}
+      {/* Revenue + Subscription */}
+      <div className="grid lg:grid-cols-3 gap-6 mb-8">
+
         <div className="dashboard-card p-6 lg:col-span-2">
-          <h3 className="section-title mb-4">Monthly Revenue Trend</h3>
-          <div className="h-[300px] w-full">
-            {monthlyRevenueData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyRevenueData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="month" 
-                    tick={{ fontSize: 12 }} 
-                    stroke="hsl(var(--muted-foreground))" 
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(val) => `₹${val/1000}k`}
-                    stroke="hsl(var(--muted-foreground))" 
-                  />
-                  <Tooltip 
-                    cursor={{ fill: 'hsl(var(--muted)/0.2)' }}
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      borderRadius: '8px' 
-                    }}
-                    formatter={(val: number) => formatCurrency(val)}
-                  />
-                  <Bar 
-                    dataKey="revenue" 
-                    fill="hsl(var(--primary))" 
-                    radius={[4, 4, 0, 0]}
-                    name="Revenue"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                No revenue data available
-              </div>
-            )}
-          </div>
+          <h3 className="section-title mb-4">Monthly Revenue</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={monthlyRevenueData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="revenue" fill="hsl(var(--primary))" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Subscription Pie Chart */}
         <div className="dashboard-card p-6">
-          <h3 className="section-title mb-4">Subscription Types</h3>
-          <div className="h-[300px] w-full">
-            {subscriptionDistribution.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={subscriptionDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {subscriptionDistribution.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill || COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      borderRadius: '8px' 
-                    }}
-                  />
-                  <Legend verticalAlign="bottom" height={36}/>
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                No active subscriptions
-              </div>
-            )}
-          </div>
+          <h3 className="section-title mb-4">Subscriptions</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie data={subscriptionDistribution} dataKey="value" outerRadius={80}>
+                {subscriptionDistribution.map((entry: any, index: number) => (
+                  <Cell key={index} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Recent Users Table */}
-      <div>
-        <h3 className="section-title mb-4">Recent Registrations</h3>
-        <DataTable
-          columns={recentUsersColumns}
-          data={recentUsersList}
-          searchable={false}
-          emptyMessage="No recent users found"
-        />
+      {/* ================= Global Leaderboard ================= */}
+      <div className="dashboard-card p-6">
+        <h3 className="section-title mb-6 flex items-center gap-2">
+          <Trophy className="w-5 h-5 text-yellow-500" />
+          Global Top 20 Leaderboard
+        </h3>
+
+        {rankingLoading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : rankingList.length === 0 ? (
+          <div className="text-center text-muted-foreground py-8">
+            No ranking data available
+          </div>
+        ) : (
+          <>
+            {/* Podium */}
+            <div className="grid md:grid-cols-3 gap-4 mb-8 text-center">
+
+              {/* 2nd */}
+              {podium[1] && (
+                <div className="bg-muted rounded-lg p-4">
+                  <Medal className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                  <div className="font-semibold">{podium[1].userName}</div>
+                  <div className="text-sm">{podium[1].averageScore}</div>
+                  <div className="font-bold">#2</div>
+                </div>
+              )}
+
+              {/* 1st */}
+              {podium[0] && (
+                <div className="bg-primary/10 border border-primary rounded-lg p-6 scale-105">
+                  <Crown className="w-10 h-10 mx-auto text-yellow-500 mb-2" />
+                  <div className="font-bold text-lg">{podium[0].userName}</div>
+                  <div className="text-sm">{podium[0].averageScore}</div>
+                  <div className="font-bold text-primary">#1</div>
+                </div>
+              )}
+
+              {/* 3rd */}
+              {podium[2] && (
+                <div className="bg-muted rounded-lg p-4">
+                  <Medal className="w-8 h-8 mx-auto text-amber-600 mb-2" />
+                  <div className="font-semibold">{podium[2].userName}</div>
+                  <div className="text-sm">{podium[2].averageScore}</div>
+                  <div className="font-bold">#3</div>
+                </div>
+              )}
+            </div>
+
+            {/* List */}
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {others.map((user: any) => (
+                <div
+                  key={user.rank}
+                  className="flex justify-between items-center border rounded-lg p-3"
+                >
+                  <div className="flex gap-3">
+                    <div className="font-bold text-primary w-10">
+                      #{user.rank}
+                    </div>
+                    <div>
+                      <div className="font-medium">{user.userName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {user.bestScore} Best
+                      </div>
+                    </div>
+                  </div>
+                  <div className="font-semibold">
+                    {user.totalMarks} marks
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
+
     </DashboardLayout>
   );
 };
