@@ -17,21 +17,16 @@ import { useVerifyOTP } from "@/hooks/useAuth";
 const OTPVerification = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   // Data passed from Login.tsx
   const phoneNumber = sessionStorage.getItem("otp_phone_number");
 
   // Custom Hook
-  const { 
-    verifyOtp, 
-    isVerifying, 
-    verifyError, 
-    resendOtp, 
-    isResending 
-  } = useVerifyOTP();
+  const { verifyOtp, isVerifying, verifyError, resendOtp, isResending } =
+    useVerifyOTP();
 
   // UI State
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", ""]);
   const [shake, setShake] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
   const [resendTimer, setResendTimer] = useState(30);
@@ -65,7 +60,7 @@ const OTPVerification = () => {
   useEffect(() => {
     if (verifyError) {
       setShake(true);
-      setOtp(["", "", "", "", "", ""]); // Clear inputs
+      setOtp(["", "", "", ""]); // Clear inputs
       inputRefs.current[0]?.focus(); // Focus first
       const timer = setTimeout(() => setShake(false), 500);
       return () => clearTimeout(timer);
@@ -80,12 +75,15 @@ const OTPVerification = () => {
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
-    if (value && index < 5) {
+    if (value && index < 3) {
       inputRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
     if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
@@ -93,13 +91,16 @@ const OTPVerification = () => {
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    const pastedData = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 4);
     const newOtp = [...otp];
     pastedData.split("").forEach((char, index) => {
-      if (index < 6) newOtp[index] = char;
+      if (index < 4) newOtp[index] = char;
     });
     setOtp(newOtp);
-    const lastIndex = Math.min(pastedData.length, 5);
+    const lastIndex = Math.min(pastedData.length, 3);
     inputRefs.current[lastIndex]?.focus();
   };
 
@@ -107,15 +108,15 @@ const OTPVerification = () => {
     if (e) e.preventDefault();
     const otpValue = otp.join("");
 
-    if (otpValue.length !== 6) {
+    if (otpValue.length !== 4) {
       setShake(true);
       setTimeout(() => setShake(false), 500);
       return;
     }
 
     // Call Hook
-    verifyOtp({ 
-      otpCode: otpValue, // Matches the updated Hook interface 
+    verifyOtp({
+      otpCode: otpValue, // Matches the updated Hook interface
     });
   };
 
@@ -134,13 +135,15 @@ const OTPVerification = () => {
       <div
         className={cn(
           "w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 md:p-12 transition-all duration-700",
-          isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          isPageLoaded
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 translate-y-4",
         )}
       >
         <div
           className={cn(
             "w-full max-w-[400px] space-y-6",
-            shake && "animate-shake"
+            shake && "animate-shake",
           )}
         >
           {/* Back Button */}
@@ -166,7 +169,7 @@ const OTPVerification = () => {
               OTP Verification
             </h1>
             <p className="text-muted-foreground text-sm">
-              Enter the 6-digit code sent to
+              Enter the 4-digit code sent to
             </p>
             <p className="text-foreground font-medium">
               +91 {phoneNumber.slice(0, 2)}****{phoneNumber.slice(-2)}
@@ -178,7 +181,8 @@ const OTPVerification = () => {
             <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg animate-fade-in">
               <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
               <p className="text-sm text-destructive font-medium">
-                {(verifyError as any)?.response?.data?.message || "Invalid OTP Code"}
+                {(verifyError as any)?.response?.data?.message ||
+                  "Invalid OTP Code"}
               </p>
             </div>
           )}
@@ -207,7 +211,7 @@ const OTPVerification = () => {
                       "transition-all duration-200",
                       verifyError
                         ? "border-destructive focus:ring-destructive/20 focus:border-destructive"
-                        : "border-input hover:border-primary/50"
+                        : "border-input hover:border-primary/50",
                     )}
                   />
                 ))}
@@ -241,14 +245,14 @@ const OTPVerification = () => {
             {/* Submit Button */}
             <button
               onClick={handleSubmit}
-              disabled={isVerifying || otp.join("").length !== 6}
+              disabled={isVerifying || otp.join("").length !== 4}
               className={cn(
                 "w-full py-3 px-4 rounded-lg font-semibold text-primary-foreground",
                 "bg-primary hover:bg-primary/90 active:scale-[0.98]",
                 "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
                 "transition-all duration-200",
                 "disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:bg-primary",
-                "flex items-center justify-center gap-2"
+                "flex items-center justify-center gap-2",
               )}
             >
               {isVerifying ? (
@@ -279,7 +283,7 @@ const OTPVerification = () => {
       <div
         className={cn(
           "hidden lg:flex w-1/2 relative overflow-hidden",
-          "bg-gradient-to-br from-primary via-primary to-violet-600"
+          "bg-gradient-to-br from-primary via-primary to-violet-600",
         )}
       >
         <div className="absolute inset-0">
@@ -298,15 +302,20 @@ const OTPVerification = () => {
         <div
           className={cn(
             "relative z-10 flex flex-col items-center justify-center w-full p-12 text-center text-white transition-all duration-1000 delay-300",
-            isPageLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+            isPageLoaded
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-8",
           )}
         >
           <div className="mb-8 p-8 bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20">
             <GraduationCap className="h-24 w-24 text-white" />
           </div>
-          <h2 className="text-3xl font-bold mb-4">India's #1 Exam Preparation Platform</h2>
+          <h2 className="text-3xl font-bold mb-4">
+            India's #1 Exam Preparation Platform
+          </h2>
           <p className="text-lg text-white/80 mb-8 max-w-md">
-            Empowering students to achieve their dreams with comprehensive exam preparation resources
+            Empowering students to achieve their dreams with comprehensive exam
+            preparation resources
           </p>
           <div className="flex items-center gap-8">
             <div className="text-center">
