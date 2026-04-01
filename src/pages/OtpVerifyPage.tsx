@@ -265,13 +265,6 @@ const OTPVerification = () => {
               )}
             </button>
           </div>
-
-          <div className="text-center p-3 bg-muted/50 rounded-lg border border-border">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium">Demo OTP:</span> 123456
-            </p>
-          </div>
-
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <Shield className="h-4 w-4" />
             <span>Secure OTP Verification</span>
